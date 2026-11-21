@@ -105,7 +105,9 @@ export function AICommandCenter({ onScheduleUpdated }: AICommandCenterProps) {
     try {
       await api.rejectProposal(pendingProposal.id);
       setPendingProposal(null);
-    } catch (err: any) {}
+    } catch {
+      // Ignore dismiss error
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {

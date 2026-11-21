@@ -9,16 +9,10 @@ import {
   CircleDot,
   ArrowRight,
   Ban,
-  Send,
   Sparkles,
   AlertCircle,
-  Clock,
-  Calendar,
   X,
   ShieldCheck,
-  HelpCircle,
-  Split,
-  ChevronRight,
 } from 'lucide-react';
 import { api } from '../services/api';
 
@@ -180,7 +174,7 @@ export function DailyReview() {
   if (carryForwardProposal?.proposalData) {
     try {
       parsedProposalData = JSON.parse(carryForwardProposal.proposalData);
-    } catch (e) {
+    } catch {
       parsedProposalData = null;
     }
   }

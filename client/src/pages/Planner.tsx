@@ -220,7 +220,7 @@ export function Planner() {
   if (pendingProposal?.proposalData) {
     try {
       parsedProposalData = JSON.parse(pendingProposal.proposalData);
-    } catch (e) {
+    } catch {
       parsedProposalData = null;
     }
   }

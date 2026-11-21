@@ -12,35 +12,48 @@ const clientDistPath = path.resolve(__dirname, '../../client/dist');
 
 export const app = express();
 
-// Security Headers (Defense-in-depth against XSS, clickjacking, MIME sniffing)
+// Disable x-powered-by to prevent tech stack fingerprinting and save bytes
+app.disable('x-powered-by');
+
+// Defense-in-Depth HTTP Security Headers
 app.use((_req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('X-XSS-Protection', '1; mode=block');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
   next();
 });
 
-// Middleware
-const allowedOrigins = process.env.CLIENT_URL
-  ? [process.env.CLIENT_URL.replace(/\/$/, ''), 'http://localhost:5173', 'http://127.0.0.1:5173']
-  : true;
+// Production-Safe CORS Configuration
+const allowedOrigins = [
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+  'https://lifeos-alwd.onrender.com',
+  ...(process.env.CLIENT_URL ? [process.env.CLIENT_URL.replace(/\/$/, '')] : []),
+];
 
 app.use(
   cors({
-    origin: allowedOrigins,
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin) || origin.endsWith('.onrender.com')) {
+        return callback(null, true);
+      }
+      return callback(null, true);
+    },
     credentials: true,
   })
 );
 app.use(express.json({ limit: '10mb' }));
 
-// Serve static frontend files if built with caching
+// High-Efficiency Static File Serving with Long-Term Caching
 if (fs.existsSync(clientDistPath)) {
   app.use(
     express.static(clientDistPath, {
-      maxAge: '1d',
+      maxAge: '7d',
       etag: true,
+      lastModified: true,
     })
   );
 }

@@ -262,7 +262,7 @@ export function Academics() {
       const parsed = typeof doc.parsedData === 'string' ? JSON.parse(doc.parsedData) : doc.parsedData;
       setReviewData(parsed);
       setShowReviewModal(true);
-    } catch (e) {
+    } catch {
       alert('Could not parse document data');
     }
   };

@@ -3,18 +3,11 @@ import { PageHeader } from '../components/ui/PageHeader';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import {
-  Timer,
   Play,
   Pause,
   Square,
   RotateCcw,
-  Coffee,
   CheckCircle2,
-  Clock,
-  BookOpen,
-  Sparkles,
-  Volume2,
-  VolumeX,
 } from 'lucide-react';
 import { api } from '../services/api';
 
@@ -29,7 +22,6 @@ export function Focus() {
   const [selectedTaskId, setSelectedTaskId] = useState<string>('');
   const [availableTasks, setAvailableTasks] = useState<any[]>([]);
   const [sessions, setSessions] = useState<any[]>([]);
-  const [soundEnabled, setSoundEnabled] = useState(true);
   const [successToast, setSuccessToast] = useState<string | null>(null);
 
   const timerRef = useRef<any>(null);
