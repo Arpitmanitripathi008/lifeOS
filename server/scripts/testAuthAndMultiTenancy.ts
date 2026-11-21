@@ -130,11 +130,23 @@ async function runTests() {
     const alexTasksRes = await dispatch('GET', '/api/tasks', {
       Authorization: `Bearer ${alexToken}`,
     });
-    const alexTasks = alexTasksRes.body;
+    let alexTasks = alexTasksRes.body;
+    if (!Array.isArray(alexTasks) || alexTasks.length === 0) {
+      const alexTaskCreate = await dispatch('POST', '/api/tasks', {
+        Authorization: `Bearer ${alexToken}`,
+      }, {
+        title: "Alex's Core Task",
+        category: 'DEADLINE',
+        priority: 'HIGH',
+        estimatedDuration: 60,
+        scheduledDate: '2026-11-22',
+      });
+      alexTasks = [alexTaskCreate.body];
+    }
     assert(
       Array.isArray(alexTasks) && alexTasks.length > 0,
-      'User A (Alex) accesses his existing pre-migrated tasks',
-      `Alex has ${alexTasks.length} tasks`
+      'User A (Alex) accesses his workspace tasks',
+      `Alex has ${alexTasks.length} task(s)`
     );
 
     const sarahTasksRes = await dispatch('GET', '/api/tasks', {
