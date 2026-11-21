@@ -1,29 +1,55 @@
 import { prisma } from './client.js';
+import bcrypt from 'bcryptjs';
 
-async function main() {
-  console.log('[Seed] Seeding LifeOS database...');
+export async function seedDatabase() {
+  console.log('[Seed] Checking LifeOS database seed state...');
 
-  // 1. Ensure User Profile
-  const profile = await prisma.userProfile.upsert({
-    where: { id: 'default-student' },
-    update: {},
-    create: {
-      id: 'default-student',
-      displayName: 'Student',
-      collegeStartTime: '09:00',
-      collegeEndTime: '15:00',
-      breakfastTime: '08:00',
-      lunchTime: '13:00',
-      dinnerTime: '20:00',
-      defaultTaskDuration: 45,
+  // 1. Ensure Default Demo User: Alex Rivera
+  let user = await prisma.user.findFirst({
+    where: {
+      OR: [{ username: 'alex_rivera' }, { email: 'alex@lifeos.edu' }],
     },
   });
 
-  // 2. Fixed Commitments
-  const collegeCommitments = [1, 2, 3, 4, 5]; // Mon - Fri
+  if (!user) {
+    const passwordHash = await bcrypt.hash('password123', 10);
+    user = await prisma.user.create({
+      data: {
+        username: 'alex_rivera',
+        fullName: 'Alex Rivera',
+        email: 'alex@lifeos.edu',
+        passwordHash,
+      },
+    });
+    console.log(`✓ Created demo student account: @${user.username} (${user.id})`);
+  }
+
+  // 2. Ensure User Profile
+  const existingProfile = await prisma.userProfile.findFirst({
+    where: { userId: user.id },
+  });
+
+  if (!existingProfile) {
+    await prisma.userProfile.create({
+      data: {
+        id: `profile-${user.id}`,
+        userId: user.id,
+        displayName: 'Alex Rivera',
+        collegeStartTime: '09:00',
+        collegeEndTime: '15:00',
+        breakfastTime: '08:00',
+        lunchTime: '13:00',
+        dinnerTime: '20:00',
+        defaultTaskDuration: 45,
+      },
+    });
+  }
+
+  // 3. Fixed Commitments (Mon - Fri College Classes)
+  const collegeCommitments = [1, 2, 3, 4, 5];
   for (const day of collegeCommitments) {
     const existing = await prisma.fixedCommitment.findFirst({
-      where: { title: 'College Classes', dayOfWeek: day },
+      where: { title: 'College Classes', dayOfWeek: day, userId: user.id },
     });
     if (!existing) {
       await prisma.fixedCommitment.create({
@@ -34,14 +60,15 @@ async function main() {
           startTime: '09:00',
           endTime: '15:00',
           isRecurring: true,
+          userId: user.id,
         },
       });
     }
   }
 
-  // 3. Sample Subject
+  // 4. Sample Academic Subject & Units
   let dsaSubject = await prisma.subject.findFirst({
-    where: { name: 'Data Structures & Algorithms' },
+    where: { name: 'Data Structures & Algorithms', userId: user.id },
   });
   if (!dsaSubject) {
     dsaSubject = await prisma.subject.create({
@@ -49,6 +76,7 @@ async function main() {
         name: 'Data Structures & Algorithms',
         code: 'CS301',
         colorTag: '#68754C',
+        userId: user.id,
         units: {
           create: [
             {
@@ -77,12 +105,12 @@ async function main() {
     });
   }
 
-  // 4. Sample Personal Goal
+  // 5. Sample Personal Goal
   let pythonGoal = await prisma.personalGoal.findFirst({
-    where: { name: 'Learn Python for AI' },
+    where: { name: 'Learn Python for AI', userId: user.id },
   });
   if (!pythonGoal) {
-    pythonGoal = await prisma.personalGoal.create({
+    await prisma.personalGoal.create({
       data: {
         name: 'Learn Python for AI',
         category: 'CODING',
@@ -92,14 +120,15 @@ async function main() {
         maxSessionsPerWeek: 5,
         sessionDurationMins: 45,
         priority: 'HIGH',
+        userId: user.id,
       },
     });
   }
 
-  // 5. Sample Task for Today
+  // 6. Sample Task for Today
   const today = new Date().toISOString().split('T')[0];
   const existingTask = await prisma.task.findFirst({
-    where: { title: 'DSA: Solve Monotonic Stack Problems', scheduledDate: today },
+    where: { title: 'DSA: Solve Monotonic Stack Problems', scheduledDate: today, userId: user.id },
   });
   if (!existingTask) {
     await prisma.task.create({
@@ -114,18 +143,22 @@ async function main() {
         scheduledEndTime: '17:30',
         status: 'PENDING',
         subjectId: dsaSubject.id,
+        userId: user.id,
       },
     });
   }
 
-  console.log('[Seed] Seeding completed successfully!');
+  console.log('[Seed] Database initialization complete.');
 }
 
-main()
-  .catch((e) => {
-    console.error(e);
-    process.exit(1);
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
+// Direct execution support
+if (process.argv[1]?.includes('seed.ts') || process.argv[1]?.includes('seed.js')) {
+  seedDatabase()
+    .catch((e) => {
+      console.error(e);
+      process.exit(1);
+    })
+    .finally(async () => {
+      await prisma.$disconnect();
+    });
+}

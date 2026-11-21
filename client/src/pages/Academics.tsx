@@ -21,8 +21,6 @@ import {
   FileSpreadsheet,
   X,
   Calendar,
-  Layers,
-  ArrowRight,
   ShieldCheck,
   HelpCircle,
   ClipboardList,

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Card } from '../ui/Card';
-import { Calendar, Plus, CheckCircle2, Circle, Clock, Tag, Sparkles, RotateCcw, Trash2 } from 'lucide-react';
+import { Calendar, Plus, CheckCircle2, Circle, Clock, Sparkles, RotateCcw, Trash2 } from 'lucide-react';
 import { EmptyState } from '../ui/EmptyState';
 import { Button } from '../ui/Button';
 import { api } from '../../services/api';

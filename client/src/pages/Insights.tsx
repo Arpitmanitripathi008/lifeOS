@@ -6,18 +6,9 @@ import { Button } from '../components/ui/Button';
 import {
   BookOpen,
   Target,
-  Timer,
   Moon,
   Activity,
-  CalendarCheck,
   CheckCircle2,
-  AlertCircle,
-  HelpCircle,
-  TrendingUp,
-  Plus,
-  Clock,
-  Sparkles,
-  ShieldCheck,
   X,
 } from 'lucide-react';
 import { api } from '../services/api';

@@ -48,7 +48,7 @@ export const Signup: React.FC = () => {
     try {
       setLoading(true);
       await register(fullName.trim(), username.trim().toLowerCase(), email.trim().toLowerCase(), password);
-      navigate('/', { replace: true });
+      navigate('/dashboard', { replace: true });
     } catch (err: any) {
       setError(err.message || 'Failed to create account. Please check your information.');
     } finally {
@@ -60,6 +60,11 @@ export const Signup: React.FC = () => {
     <div className="min-h-screen bg-ivory flex flex-col justify-center py-12 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         {/* Branding header */}
+        <div className="text-center mb-4">
+          <Link to="/" className="text-xs font-medium text-muted hover:text-charcoal inline-flex items-center gap-1 transition-colors">
+            ← Back to Home
+          </Link>
+        </div>
         <div className="flex justify-center items-center gap-3 mb-3">
           <div className="w-12 h-12 rounded-2xl bg-olive flex items-center justify-center shadow-md">
             <span className="text-paper text-xl font-serif font-bold">L</span>

@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 
 const mobileNavItems = [
-  { path: '/', label: 'Home', icon: LayoutDashboard },
+  { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { path: '/planner', label: 'Planner', icon: CalendarDays },
   { path: '/academics', label: 'Academics', icon: GraduationCap },
   { path: '/goals', label: 'Goals', icon: Target },

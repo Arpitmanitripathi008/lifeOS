@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Eye, EyeOff, Lock, User as UserIcon, AlertCircle, ArrowRight, ShieldCheck } from 'lucide-react';
@@ -7,7 +7,7 @@ export const Login: React.FC = () => {
   const { login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const from = (location.state as any)?.from?.pathname || '/';
+  const from = (location.state as any)?.from?.pathname || '/dashboard';
 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -41,14 +41,26 @@ export const Login: React.FC = () => {
 
   const fillDemoAccount = () => {
     setUsername('alex_rivera');
-    setPassword('LifeOS2026!');
+    setPassword('password123');
     setError(null);
   };
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('demo') === 'true') {
+      fillDemoAccount();
+    }
+  }, []);
 
   return (
     <div className="min-h-screen bg-ivory flex flex-col justify-center py-12 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         {/* Branding header */}
+        <div className="text-center mb-4">
+          <Link to="/" className="text-xs font-medium text-muted hover:text-charcoal inline-flex items-center gap-1 transition-colors">
+            ← Back to Home
+          </Link>
+        </div>
         <div className="flex justify-center items-center gap-3 mb-3">
           <div className="w-12 h-12 rounded-2xl bg-olive flex items-center justify-center shadow-md">
             <span className="text-paper text-xl font-serif font-bold">L</span>

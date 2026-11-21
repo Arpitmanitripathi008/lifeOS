@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { PageHeader } from '../components/ui/PageHeader';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
-import { User, Clock, Calendar, Zap, Save, Check, CalendarOff, RotateCcw, Trash2, AlertTriangle, CheckCircle2, Loader2, X } from 'lucide-react';
+import { User, Clock, Calendar, Zap, Save, Check, RotateCcw, Trash2, AlertTriangle, CheckCircle2, Loader2, X } from 'lucide-react';
 import { api } from '../services/api';
 
 const WEEKDAYS = [
