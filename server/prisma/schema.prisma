@@ -1,0 +1,331 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// 0. User Account (Authentication & Multi-Tenancy)
+model User {
+  id           String   @id @default(uuid())
+  username     String   @unique
+  email        String   @unique
+  passwordHash String
+  fullName     String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  profile       UserProfile?
+  commitments   FixedCommitment[]
+  tasks         Task[]
+  subjects      Subject[]
+  personalGoals PersonalGoal[]
+  schedules     DailySchedule[]
+  sleepRecords  SleepRecord[]
+  focusSessions FocusSession[]
+  dailyReviews  DailyReview[]
+  documents     UploadedDocument[]
+  proposals     AIProposal[]
+  scheduleOverrides ScheduleOverride[]
+}
+
+// 1. User Profile & Preferences
+model UserProfile {
+  id                  String   @id @default(uuid())
+  userId              String?  @unique
+  user                User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  displayName         String   @default("Student")
+  collegeStartTime    String?  @default("09:00") // "HH:mm"
+  collegeEndTime      String?  @default("15:00") // "HH:mm"
+  breakfastTime       String?  @default("08:00") // "HH:mm"
+  lunchTime           String?  @default("13:00") // "HH:mm"
+  dinnerTime          String?  @default("20:00") // "HH:mm"
+  defaultTaskDuration Int      @default(45) // minutes
+  weeklyHolidays      String?  @default("[0]") // JSON array e.g. [0] for Sunday, [0, 6] for Sat+Sun
+  weeklyCollegeTimings String? @default("{\"1\":{\"start\":\"09:00\",\"end\":\"15:00\"},\"2\":{\"start\":\"09:00\",\"end\":\"15:00\"},\"3\":{\"start\":\"09:00\",\"end\":\"15:00\"},\"4\":{\"start\":\"09:00\",\"end\":\"15:00\"},\"5\":{\"start\":\"09:00\",\"end\":\"15:00\"}}")
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
+// 2. Fixed Commitments (Classes, Meals, Recurring Events)
+model FixedCommitment {
+  id           String   @id @default(uuid())
+  userId       String?
+  user         User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title        String
+  category     String   @default("COLLEGE") // COLLEGE, MEAL, APPOINTMENT, COMMUTE, OTHER
+  dayOfWeek    Int?     // 0 = Sunday, 1 = Monday ... 6 = Saturday (null if single date)
+  specificDate String?  // "YYYY-MM-DD" if single event
+  startTime    String   // "HH:mm"
+  endTime      String   // "HH:mm"
+  isRecurring  Boolean  @default(true)
+  isDemo       Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+// 3. Tasks
+model Task {
+  id                 String    @id @default(uuid())
+  userId             String?
+  user               User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title              String
+  description        String?
+  category           String    @default("DEADLINE") // FIXED, DEADLINE, PERSONAL_GROWTH, HEALTH, FLEXIBLE
+  priority           String    @default("MEDIUM")   // LOW, MEDIUM, HIGH, URGENT
+  estimatedDuration  Int       @default(45)         // in minutes
+  remainingDuration  Int?                           // in minutes if partially completed
+  deadline           String?                        // "YYYY-MM-DD" or ISO string
+  scheduledDate      String?                        // "YYYY-MM-DD"
+  scheduledStartTime String?                        // "HH:mm"
+  scheduledEndTime   String?                        // "HH:mm"
+  status             String    @default("PENDING")  // PENDING, COMPLETED, PARTIALLY_COMPLETED, POSTPONED, CANCELLED
+  postponedReason    String?
+  timesPostponed     Int       @default(0)
+  source             String    @default("MANUAL")   // MANUAL, AI_PROPOSAL, SYLLABUS, PERSONAL_GROWTH
+  isFixed            Boolean   @default(false)
+  isDemo             Boolean   @default(false)
+
+  // Relations
+  subjectId          String?
+  subject            Subject?       @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+  unitTopicId        String?
+  unitTopic          UnitTopic?     @relation(fields: [unitTopicId], references: [id], onDelete: SetNull)
+  personalGoalId     String?
+  personalGoal       PersonalGoal?  @relation(fields: [personalGoalId], references: [id], onDelete: SetNull)
+  assignmentId       String?
+  assignment         Assignment?    @relation(fields: [assignmentId], references: [id], onDelete: SetNull)
+  focusSessions      FocusSession[]
+  goalSessions       GoalSession[]
+
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+}
+
+// 4. Subjects
+model Subject {
+  id          String         @id @default(uuid())
+  userId      String?
+  user        User?          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  code        String?
+  colorTag    String         @default("#68754C")
+  units       Unit[]
+  exams       AcademicExam[]
+  assignments Assignment[]
+  tasks       Task[]
+  isDemo      Boolean        @default(false)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+}
+
+// 5. Academic Units & Topics
+model Unit {
+  id         String      @id @default(uuid())
+  subjectId  String
+  subject    Subject     @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  unitNumber Int
+  title      String
+  topics     UnitTopic[]
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+}
+
+model UnitTopic {
+  id               String   @id @default(uuid())
+  unitId           String
+  unit             Unit     @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  title            String
+  estimatedMinutes Int      @default(45)
+  isCompleted      Boolean  @default(false)
+  tasks            Task[]
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+// 6. Academic Examinations
+model AcademicExam {
+  id        String   @id @default(uuid())
+  subjectId String
+  subject   Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  examDate  String   // "YYYY-MM-DD"
+  startTime String?  // "HH:mm"
+  endTime   String?  // "HH:mm"
+  location  String?
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// 7. Assignments
+model Assignment {
+  id             String    @id @default(uuid())
+  subjectId      String
+  subject        Subject   @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  title          String
+  description    String?
+  deadline       String    // "YYYY-MM-DD"
+  estimatedHours Float     @default(2.0)
+  status         String    @default("PENDING") // PENDING, IN_PROGRESS, COMPLETED, SUBMITTED
+  tasks          Task[]
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+}
+
+// 8. Personal Goals
+model PersonalGoal {
+  id                  String        @id @default(uuid())
+  userId              String?
+  user                User?         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name                String        // e.g. "DSA Practice", "Learn Python", "Indian Law"
+  category            String        @default("CODING") // CODING, FINANCE, HOBBY, FITNESS, ACADEMIC_EXTRA, OTHER
+  description         String?
+  minSessionsPerWeek  Int           @default(2)
+  prefSessionsPerWeek Int           @default(3)
+  maxSessionsPerWeek  Int           @default(5)
+  sessionDurationMins Int           @default(45)
+  priority            String        @default("MEDIUM") // LOW, MEDIUM, HIGH
+  targetDate          String?       // "YYYY-MM-DD"
+  active              Boolean       @default(true)
+  isDemo              Boolean       @default(false)
+  tasks               Task[]
+  goalSessions        GoalSession[]
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+}
+
+// 9. Goal Sessions (Log of scheduled or completed sessions for personal goals)
+model GoalSession {
+  id             String       @id @default(uuid())
+  personalGoalId String
+  personalGoal   PersonalGoal @relation(fields: [personalGoalId], references: [id], onDelete: Cascade)
+  taskId         String?
+  task           Task?        @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  scheduledDate  String       // "YYYY-MM-DD"
+  durationMins   Int          @default(45)
+  isCompleted    Boolean      @default(false)
+  completedAt    DateTime?
+  createdAt      DateTime     @default(now())
+}
+
+// 10. Daily Schedules (Committed or compiled daily schedule state)
+model DailySchedule {
+  id             String   @id @default(uuid())
+  userId         String?
+  user           User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date           String   // "YYYY-MM-DD"
+  wakeUpTime     String?  // "HH:mm"
+  sleepTime      String?  // "HH:mm"
+  isFinalized    Boolean  @default(false)
+  notes          String?
+  isDemo         Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([userId, date])
+}
+
+// 11. Sleep Records
+model SleepRecord {
+  id              String   @id @default(uuid())
+  userId          String?
+  user            User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date            String   // "YYYY-MM-DD" (the morning date)
+  bedTimeApprox   String?  // "HH:mm" (e.g. "00:15")
+  wakeUpTime      String   // "HH:mm" (e.g. "07:30")
+  durationMinutes Int?     // e.g. 435 (7h 15m)
+  notes           String?
+  isDemo          Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([userId, date])
+}
+
+// 12. Focus Sessions
+model FocusSession {
+  id              String   @id @default(uuid())
+  userId          String?
+  user            User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  taskId          String?
+  task            Task?    @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  durationMinutes Int      @default(25)
+  sessionType     String   @default("FOCUS") // FOCUS, SHORT_BREAK, LONG_BREAK
+  isDemo          Boolean  @default(false)
+  completedAt     DateTime @default(now())
+}
+
+// 13. Daily Reviews
+model DailyReview {
+  id                  String   @id @default(uuid())
+  userId              String?
+  user                User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date                String   // "YYYY-MM-DD"
+  summaryNotes        String?
+  tasksCompletedCount Int      @default(0)
+  tasksPartiallyDone  Int      @default(0)
+  tasksPostponedCount Int      @default(0)
+  tasksCancelledCount Int      @default(0)
+  academicScore       Float?
+  growthScore         Float?
+  recoveryScore       Float?
+  followThroughScore  Float?
+  isDemo              Boolean  @default(false)
+  reviewedAt          DateTime @default(now())
+
+  @@unique([userId, date])
+}
+
+// 14. Uploaded Documents
+model UploadedDocument {
+  id          String   @id @default(uuid())
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fileName    String
+  fileType    String   // PDF, DOCX, TXT, IMAGE
+  fileSize    Int      // bytes
+  filePath    String
+  docCategory String   @default("SYLLABUS") // SYLLABUS, EXAM_TIMETABLE, TIMETABLE, OTHER
+  parsedData  String?  // JSON string
+  status      String   @default("UPLOADED") // UPLOADED, PROCESSING, PARSED, ERROR
+  isDemo      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// 15. AI Proposals
+model AIProposal {
+  id           String   @id @default(uuid())
+  userId       String?
+  user         User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  proposalType String   @default("DAILY_SCHEDULE") // DAILY_SCHEDULE, CARRY_FORWARD, STUDY_PLAN, SCHEDULE_MODIFICATION, DATA_RESET
+  targetDate   String?  // "YYYY-MM-DD"
+  proposalData String   // JSON string of proposed tasks/adjustments
+  explanation  String?  // Reason for choices
+  status       String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  isDemo       Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+// 16. Temporary Schedule Overrides (Holidays, Half-days, Custom Hours)
+model ScheduleOverride {
+  id                String   @id @default(uuid())
+  userId            String?
+  user              User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date              String   // "YYYY-MM-DD"
+  overrideType      String   // "FULL_HOLIDAY", "HALF_DAY", "CUSTOM_HOURS", "CANCEL_CLASSES"
+  originalStartTime String?  // e.g. "09:00"
+  originalEndTime   String?  // e.g. "15:00"
+  adjustedStartTime String?  // e.g. "09:00"
+  adjustedEndTime   String?  // e.g. "12:00"
+  reason            String?  // e.g. "College holiday declared"
+  isActive          Boolean  @default(true)
+  isDemo            Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([userId, date])
+}
