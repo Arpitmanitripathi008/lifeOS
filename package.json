@@ -5,8 +5,8 @@
   "description": "LifeOS - Student Edition: All-in-One Full Stack Application",
   "scripts": {
     "build": "npm run build:client && npm run build:server",
-    "build:client": "cd client && npm run build",
-    "build:server": "cd server && npm run build",
+    "build:client": "cd client && npm install --include=dev && npm run build",
+    "build:server": "cd server && npm install --include=dev && npx prisma generate && npx prisma db push && npm run build",
     "start": "cd server && npm start"
   }
 }
