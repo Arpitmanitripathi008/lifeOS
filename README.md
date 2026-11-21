@@ -14,6 +14,19 @@ LifeOS is an intelligent, deterministic, and privacy-first life management syste
 
 ---
 
+## User Interface Showcase
+
+| **AI Command Center & Daily Schedule** | **Academic Intelligence & Syllabus Mastery** |
+| :---: | :---: |
+| ![Dashboard Timeline](docs/screenshots/desktop_dashboard.png) | ![Academics Hub](docs/screenshots/desktop_academics.png) |
+
+<p align="center">
+  <b>Adaptive Conflict-Free Schedule Planner</b><br/>
+  <img src="docs/screenshots/desktop_planner.png" alt="Schedule Planner" width="850" />
+</p>
+
+---
+
 ## Architecture Overview
 
 LifeOS follows a modular client-server architecture designed for high maintainability, strict multi-tenancy, and zero overlap scheduling:
