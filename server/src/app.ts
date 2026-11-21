@@ -9,9 +9,13 @@ dotenv.config();
 export const app = express();
 
 // Middleware
+const allowedOrigins = process.env.CLIENT_URL
+  ? [process.env.CLIENT_URL.replace(/\/$/, ''), 'http://localhost:5173', 'http://127.0.0.1:5173']
+  : true;
+
 app.use(
   cors({
-    origin: ['http://localhost:5173', 'http://127.0.0.1:5173'],
+    origin: allowedOrigins,
     credentials: true,
   })
 );

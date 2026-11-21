@@ -1,6 +1,6 @@
 // LifeOS API Client
 
-const API_BASE = '/api';
+const API_BASE = (import.meta.env.VITE_API_URL ? (import.meta.env.VITE_API_URL as string).replace(/\/$/, '') : '') + '/api';
 
 export function getAuthToken(): string | null {
   return localStorage.getItem('lifeos_token');
@@ -293,7 +293,7 @@ export const api = {
     formData.append('file', file);
     formData.append('docCategory', docCategory);
 
-    const res = await fetch('/api/documents/upload', {
+    const res = await fetch(`${API_BASE}/documents/upload`, {
       method: 'POST',
       headers: token ? { Authorization: `Bearer ${token}` } : {},
       body: formData,
