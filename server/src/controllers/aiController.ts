@@ -303,6 +303,7 @@ export async function handleCommand(req: Request, res: Response, next: NextFunct
           start: profile?.collegeStartTime || '09:00',
           end: profile?.collegeEndTime || '15:00',
         },
+        targetStudyHours: aiResult.targetStudyHours || undefined,
         completedTasksToday: completedTasksToday.map((ct) => ({
           id: ct.id,
           title: ct.title,
@@ -434,6 +435,7 @@ export async function handleCommand(req: Request, res: Response, next: NextFunct
           start: profile?.collegeStartTime || '09:00',
           end: profile?.collegeEndTime || '15:00',
         },
+        targetStudyHours: aiResult.targetStudyHours || undefined,
         completedTasksToday: completedTasksToday.map((ct) => ({
           id: ct.id,
           title: ct.title,

@@ -92,10 +92,12 @@ export const CommandResponseSchema = z.object({
         priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']).default('MEDIUM'),
         estimatedDuration: z.number().int().positive().default(45),
         preferredStartTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/).nullable().optional(),
+        isLeisure: z.boolean().default(false).optional(),
         reason: z.string().optional(),
       })
     )
     .default([]),
+  targetStudyHours: z.number().nullable().optional(),
   userExplanation: z.string().default(''),
   suggestedScheduleAction: z
     .enum(['CREATE_TASKS', 'REGENERATE_SCHEDULE', 'LOG_SLEEP', 'NO_ACTION', 'APPLY_HOLIDAY', 'PREVIEW_RESET'])
@@ -252,12 +254,22 @@ Rules:
    - If user gives sleep/wake times (e.g. "I woke up at 7:30 AM and slept around 12:15 AM"), set intent: "MORNING_CHECKIN", extract bedTimeApprox ("00:15") and wakeUpTime ("07:30"), calculate duration in minutes. Never shame sleep.
 3. UNAVAILABLE TIME:
    - If user mentions unavailability ("cannot work between 4 PM and 6 PM"), set intent: "TIME_UNAVAILABLE", mark unavailableWindow.
-4. TASK CATEGORIES:
-   - DEADLINE (assignments, exams, lab prep)
-   - PERSONAL_GROWTH (coding, languages, finance, reading, fitness)
-   - HEALTH (meals, breaks, rest)
-   - FLEXIBLE (errands, optional tasks)
-5. DATA RESET & WORKSPACE MANAGEMENT:
+4. TASK CATEGORIES & LEISURE / RECREATION / BREAKS:
+   - DEADLINE: Assignments, exams, submissions, lab prep.
+   - PERSONAL_GROWTH: Coding, DSA, projects, languages, reading.
+   - HEALTH: Meals, exercise, sports, rest.
+   - FLEXIBLE: Errands, optional tasks.
+   - GAMING & RECREATION (Free Fire, games, entertainment, movies, leisure):
+     * Set category: "FLEXIBLE", priority: "LOW", isLeisure: true.
+     * Crucial rule: Leisure, gaming, and relaxation MUST be scheduled in evening free/break time (e.g. 18:30–19:30 before dinner, or 20:45–21:45 after dinner), NEVER inside college hours or focused study blocks!
+     * NEVER drop, defer, or reject user-requested leisure or gaming sessions!
+5. USER-DIRECTED STUDY HOURS & BALANCED DAY DISTRIBUTION:
+   - If user asks for a specific study duration (e.g. "I want to study for 3 hours today", "limit study to 4 hours"):
+     Set targetStudyHours: number (e.g. 3, 4). Respect the user's requested study volume!
+   - If the user has no college today (holiday / declared absence):
+     Distribute study evenly across morning and afternoon with comfortable breaks, rather than packing everything into the morning!
+     Leave afternoon/evening break slots open for relaxation, hobbies, and leisure.
+6. DATA RESET & WORKSPACE MANAGEMENT:
    - If user asks to delete mock/sample/demo data (e.g. "Erase all previous mock data", "Clear the demo data", "Remove all sample academic records and tasks", "Delete sample data"):
      set intent: "CLEAR_MOCK_DATA", resetRequest: { mode: "CLEAR_MOCK_DATA", reason: "User requested mock data cleanup" }, suggestedScheduleAction: "PREVIEW_RESET".
    - If user asks to reset their workspace (e.g. "Reset my workspace", "I want to start fresh", "Wipe all my data", "Clear workspace"):
@@ -737,6 +749,34 @@ export function fallbackProcessCommand(
   }
 
   const tasksToSchedule: any[] = [];
+
+  // Check for gaming / recreation / leisure (e.g. Free Fire, gaming, workout)
+  const gamingMatch = userPrompt.match(/(?:play|add|schedule|want to play)\s+(?:a\s+)?(\d+(?:\.\d+)?\s*(?:hr|hours?|h|mins?|minutes?)?\s+)?(free fire|gaming|game|games|bgmi|pubg|valorant|workout|guitar|movie)/i);
+  if (gamingMatch) {
+    const rawDur = gamingMatch[1] || '60';
+    let dur = 60;
+    const durNum = parseFloat(rawDur);
+    if (!isNaN(durNum)) {
+      dur = /hr|hour|h/i.test(rawDur) || durNum <= 4 ? Math.round(durNum * 60) : Math.round(durNum);
+    }
+    const gameName = gamingMatch[2].trim();
+    tasksToSchedule.push({
+      title: `${gameName.charAt(0).toUpperCase() + gameName.slice(1)} Session`,
+      category: 'FLEXIBLE',
+      priority: 'LOW',
+      estimatedDuration: dur,
+      isLeisure: true,
+      reason: 'Recreation & leisure break (unwind & recharge)',
+    });
+  }
+
+  // Check for user-specified study hours
+  let targetStudyHours: number | null = null;
+  const studyHoursMatch = userPrompt.match(/(?:study|work)\s+(?:for\s+)?(\d+(?:\.\d+)?)\s*(?:hours?|hrs?|h)/i);
+  if (studyHoursMatch) {
+    targetStudyHours = parseFloat(studyHoursMatch[1]);
+  }
+
   const taskRegex = /(?:complete|study|work on|practice|finish|review)\s+([^(\n,]+)(?:\((\d+)\s*(?:mins?|minutes?|hours?|h)?\))?/gi;
   let match;
   while ((match = taskRegex.exec(userPrompt)) !== null) {
@@ -763,6 +803,7 @@ export function fallbackProcessCommand(
     extractedSleep,
     unavailableWindow,
     tasksToSchedule,
+    targetStudyHours,
     userExplanation: `Good morning! Logged ${extractedSleep?.sleepDurationMinutes ? Math.floor(extractedSleep.sleepDurationMinutes / 60) + 'h ' + (extractedSleep.sleepDurationMinutes % 60) + 'm' : 'your wake-up'} of rest. Scheduled your tasks with zero overlaps.${errorMessage ? ' (Offline fallback engine)' : ''}`,
     suggestedScheduleAction: tasksToSchedule.length > 0 ? 'CREATE_TASKS' : 'REGENERATE_SCHEDULE',
   };

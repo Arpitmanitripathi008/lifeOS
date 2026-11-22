@@ -32,6 +32,7 @@ export interface SchedulingContext {
   weeklyHolidays?: number[];  // e.g. [0] for Sunday, [0, 6] for Sat+Sun
   weeklyCollegeTimings?: Record<string, { start: string; end: string }>; // e.g. { "1": { start: "09:00", end: "15:00" } }
   collegeHours?: { start: string; end: string }; // Default routine college hours from user profile
+  targetStudyHours?: number; // User-requested study hours for the day (e.g. 3, 4, 6)
   activeOverride?: {
     id?: string;
     overrideType: string;
@@ -547,53 +548,105 @@ export class AdaptiveScheduler {
 
     let totalWorkMinutes = 0;
     const remainingDayMins = Math.max(0, horizonEndMinutes - effectiveStartCursor);
-    const MAX_DAILY_WORK_MINS = isToday ? Math.min(360, Math.floor(remainingDayMins * 0.75)) : 360;
+    const targetStudyLimitMins = context.targetStudyHours
+      ? context.targetStudyHours * 60
+      : (isToday ? Math.min(480, Math.floor(remainingDayMins * 0.85)) : 480);
 
     for (const item of queue) {
-      if (totalWorkMinutes + item.durationMinutes > MAX_DAILY_WORK_MINS) {
+      const isLeisure =
+        (item as any).isLeisure ||
+        /free fire|gaming|game|games|movie|entertainment|play|pubg|bgmi|valorant|hobby|relax|chill/i.test(item.title);
+
+      // Only academic work counts towards study limits; leisure and breaks never count towards study limit!
+      if (!isLeisure && totalWorkMinutes + item.durationMinutes > targetStudyLimitMins) {
         overflowTasks.push({
           title: item.title,
           estimatedDuration: item.durationMinutes,
           priority: item.priority,
           recommendedDate: tomorrowStr,
-          reason: `Daily workload limit (${MAX_DAILY_WORK_MINS / 60}h) reached. Moved to preserve balance.`,
+          reason: `Requested daily study limit (${Math.round(targetStudyLimitMins / 60)}h) reached. Moved to preserve balance.`,
         });
         continue;
       }
 
       let slotted = false;
-      for (const win of availableWindows) {
-        if (win.duration >= item.durationMinutes) {
-          const taskStart = win.start;
-          const taskEnd = taskStart + item.durationMinutes;
 
-          scheduled.push({
-            id: item.id,
-            title: item.title,
-            category: item.category,
-            priority: item.priority,
-            startTime: minutesToTime(taskStart),
-            endTime: minutesToTime(taskEnd),
-            durationMinutes: item.durationMinutes,
-            isFixed: false,
-            reason: item.reason,
-            subjectId: item.subjectId,
-            personalGoalId: item.personalGoalId,
-          });
+      // For leisure, gaming, recreation (e.g. Free Fire), prioritize evening break slots (around 18:30 or after dinner 20:45)
+      if (isLeisure) {
+        const prefTimes = [timeToMinutes('18:30'), timeToMinutes('20:45'), timeToMinutes('17:30')];
+        for (const pref of prefTimes) {
+          const winIndex = availableWindows.findIndex((w) => w.start <= pref && w.end >= pref + item.durationMinutes);
+          if (winIndex !== -1) {
+            const win = availableWindows[winIndex];
+            const actualStart = pref;
+            const taskEnd = actualStart + item.durationMinutes;
 
-          // Insert 15m health buffer after each focused task to prevent cognitive burnout
-          const bufferDuration = 15;
-          const newStart = taskEnd + bufferDuration;
-          win.start = newStart;
-          win.duration = win.end - newStart;
+            scheduled.push({
+              id: item.id,
+              title: item.title,
+              category: 'FLEXIBLE',
+              priority: 'LOW',
+              startTime: minutesToTime(actualStart),
+              endTime: minutesToTime(taskEnd),
+              durationMinutes: item.durationMinutes,
+              isFixed: false,
+              reason: 'Recreation & leisure break (unwind in free time)',
+              subjectId: item.subjectId,
+              personalGoalId: item.personalGoalId,
+            });
 
-          totalWorkMinutes += item.durationMinutes;
-          slotted = true;
-          break;
+            const originalEnd = win.end;
+            win.end = actualStart;
+            win.duration = win.end - win.start;
+            if (originalEnd - (taskEnd + 15) >= 20) {
+              availableWindows.push({
+                start: taskEnd + 15,
+                end: originalEnd,
+                duration: originalEnd - (taskEnd + 15),
+              });
+            }
+            slotted = true;
+            break;
+          }
         }
       }
 
       if (!slotted) {
+        for (const win of availableWindows) {
+          if (win.duration >= item.durationMinutes) {
+            const taskStart = win.start;
+            const taskEnd = taskStart + item.durationMinutes;
+
+            scheduled.push({
+              id: item.id,
+              title: item.title,
+              category: isLeisure ? 'FLEXIBLE' : item.category,
+              priority: item.priority,
+              startTime: minutesToTime(taskStart),
+              endTime: minutesToTime(taskEnd),
+              durationMinutes: item.durationMinutes,
+              isFixed: false,
+              reason: item.reason,
+              subjectId: item.subjectId,
+              personalGoalId: item.personalGoalId,
+            });
+
+            // Insert 15m health buffer after each focused task to prevent cognitive burnout
+            const bufferDuration = 15;
+            const newStart = taskEnd + bufferDuration;
+            win.start = newStart;
+            win.duration = win.end - newStart;
+
+            if (!isLeisure) {
+              totalWorkMinutes += item.durationMinutes;
+            }
+            slotted = true;
+            break;
+          }
+        }
+      }
+
+      if (!slotted && !isLeisure) {
         overflowTasks.push({
           title: item.title,
           estimatedDuration: item.durationMinutes,
