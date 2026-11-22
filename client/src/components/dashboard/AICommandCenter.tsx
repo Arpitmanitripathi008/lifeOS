@@ -28,9 +28,18 @@ interface AICommandCenterProps {
 export function AICommandCenter({ onScheduleUpdated }: AICommandCenterProps) {
   const [input, setInput] = useState('');
   const [isRecording, setIsRecording] = useState(false);
-  const [isSpeechSupported] = useState(() =>
-    typeof window !== 'undefined' && ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)
-  );
+  const [isTranscribingAudio, setIsTranscribingAudio] = useState(false);
+  const [speechError, setSpeechError] = useState<string | null>(null);
+
+  const isWebSpeechSupported =
+    typeof window !== 'undefined' && ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window);
+  const isMediaRecorderSupported =
+    typeof window !== 'undefined' &&
+    typeof navigator !== 'undefined' &&
+    !!navigator.mediaDevices?.getUserMedia &&
+    typeof MediaRecorder !== 'undefined';
+  const isVoiceSupported = isWebSpeechSupported || isMediaRecorderSupported;
+
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
   const [fileError, setFileError] = useState('');
   const [isThinking, setIsThinking] = useState(false);
@@ -42,7 +51,11 @@ export function AICommandCenter({ onScheduleUpdated }: AICommandCenterProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const baseTextRef = useRef('');
   const recognitionRef = useRef<any>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
 
   useEffect(() => {
     api.getAIStatus()
@@ -117,40 +130,169 @@ export function AICommandCenter({ onScheduleUpdated }: AICommandCenterProps) {
     }
   };
 
-  const toggleRecording = useCallback(() => {
-    if (!isSpeechSupported) return;
+  const startMediaRecorder = useCallback(async () => {
+    try {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setSpeechError('Microphone audio recording is not supported in this browser.');
+        return;
+      }
 
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaStreamRef.current = stream;
+
+      const mimeType =
+        typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported('audio/webm')
+          ? 'audio/webm'
+          : typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported('audio/mp4')
+          ? 'audio/mp4'
+          : '';
+
+      const mediaRecorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) {
+          audioChunksRef.current.push(e.data);
+        }
+      };
+
+      mediaRecorder.onstop = async () => {
+        if (mediaStreamRef.current) {
+          mediaStreamRef.current.getTracks().forEach((t) => t.stop());
+          mediaStreamRef.current = null;
+        }
+
+        const effectiveMime = mimeType || 'audio/webm';
+        const blob = new Blob(audioChunksRef.current, { type: effectiveMime });
+        if (blob.size === 0) return;
+
+        setIsTranscribingAudio(true);
+        setSpeechError(null);
+
+        const reader = new FileReader();
+        reader.onloadend = async () => {
+          try {
+            const base64Data = (reader.result as string).split(',')[1];
+            if (!base64Data) {
+              setIsTranscribingAudio(false);
+              return;
+            }
+
+            const res = await api.transcribeAudio({
+              audioBase64: base64Data,
+              mimeType: effectiveMime,
+            });
+
+            if (res.transcript) {
+              setInput((prev) => (prev ? prev.trim() + ' ' : '') + res.transcript);
+            }
+          } catch (transcribeErr: any) {
+            setSpeechError(transcribeErr.message || 'Error transcribing speech with AI.');
+          } finally {
+            setIsTranscribingAudio(false);
+          }
+        };
+        reader.readAsDataURL(blob);
+      };
+
+      mediaRecorderRef.current = mediaRecorder;
+      mediaRecorder.start(250);
+      setIsRecording(true);
+      setSpeechError(null);
+    } catch (err: any) {
+      console.error('Microphone access failed:', err);
+      setIsRecording(false);
+      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+        setSpeechError('Microphone permission was denied. Please allow microphone access in your browser settings (URL address bar).');
+      } else if (err.name === 'NotFoundError') {
+        setSpeechError('No microphone was found on this device.');
+      } else {
+        setSpeechError(err.message || 'Could not access microphone.');
+      }
+    }
+  }, []);
+
+  const startWebSpeech = useCallback(() => {
+    try {
+      const SpeechRecognitionClass = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
+      if (!SpeechRecognitionClass) {
+        startMediaRecorder();
+        return;
+      }
+
+      const recognition = new SpeechRecognitionClass();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = 'en-US';
+
+      baseTextRef.current = input ? input.trim() + ' ' : '';
+
+      recognition.onresult = (event: any) => {
+        let fullTranscript = '';
+        for (let i = 0; i < event.results.length; ++i) {
+          fullTranscript += event.results[i][0].transcript;
+        }
+        setInput(baseTextRef.current + fullTranscript);
+      };
+
+      recognition.onerror = (event: any) => {
+        console.warn('SpeechRecognition error:', event.error);
+        setIsRecording(false);
+        if (event.error === 'not-allowed') {
+          setSpeechError('Microphone permission was denied. Please allow microphone access in your browser settings.');
+        } else if (event.error === 'no-speech') {
+          setSpeechError('No speech detected. Please make sure your microphone is working and speak clearly.');
+        } else if (event.error === 'network') {
+          console.info('Speech recognition network error, trying audio fallback...');
+          startMediaRecorder();
+        } else if (event.error === 'audio-capture') {
+          setSpeechError('No microphone found. Please connect an audio input device.');
+        } else {
+          setSpeechError(`Voice input error: ${event.error}`);
+        }
+      };
+
+      recognition.onend = () => {
+        setIsRecording(false);
+      };
+
+      recognitionRef.current = recognition;
+      recognition.start();
+      setIsRecording(true);
+      setSpeechError(null);
+    } catch (err: any) {
+      console.warn('Web Speech start failed, falling back to MediaRecorder:', err);
+      startMediaRecorder();
+    }
+  }, [input, startMediaRecorder]);
+
+  const toggleRecording = useCallback(() => {
     if (isRecording) {
-      recognitionRef.current?.stop();
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.stop();
+        } catch {}
+        recognitionRef.current = null;
+      }
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        try {
+          mediaRecorderRef.current.stop();
+        } catch {}
+        mediaRecorderRef.current = null;
+      }
       setIsRecording(false);
       return;
     }
 
-    const SpeechRecognition = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
-    const recognition = new SpeechRecognition();
-    recognition.continuous = false;
-    recognition.interimResults = true;
-    recognition.lang = 'en-US';
-
-    recognition.onresult = (event: any) => {
-      const transcript = Array.from(event.results)
-        .map((r: any) => r[0].transcript)
-        .join('');
-      setInput(transcript);
-    };
-
-    recognition.onerror = () => {
-      setIsRecording(false);
-    };
-
-    recognition.onend = () => {
-      setIsRecording(false);
-    };
-
-    recognitionRef.current = recognition;
-    recognition.start();
-    setIsRecording(true);
-  }, [isSpeechSupported, isRecording]);
+    setSpeechError(null);
+    if (isWebSpeechSupported) {
+      startWebSpeech();
+    } else if (isMediaRecorderSupported) {
+      startMediaRecorder();
+    } else {
+      setSpeechError('Voice recording is not supported in this browser environment.');
+    }
+  }, [isRecording, isWebSpeechSupported, isMediaRecorderSupported, startWebSpeech, startMediaRecorder]);
 
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     setFileError('');
@@ -225,9 +367,43 @@ export function AICommandCenter({ onScheduleUpdated }: AICommandCenterProps) {
 
           {/* Recording indicator */}
           {isRecording && (
-            <div className="mx-5 mb-2 flex items-center gap-2 px-3 py-1.5 bg-terracotta/10 rounded-lg">
-              <div className="w-2 h-2 rounded-full bg-terracotta animate-pulse" />
-              <span className="text-xs text-terracotta font-medium">Listening... Speak now</span>
+            <div className="mx-5 mb-2 flex items-center justify-between px-3 py-1.5 bg-terracotta/10 border border-terracotta/30 rounded-lg">
+              <div className="flex items-center gap-2">
+                <div className="w-2.5 h-2.5 rounded-full bg-terracotta animate-ping" />
+                <span className="text-xs text-terracotta font-medium">Listening... Speak now</span>
+              </div>
+              <button
+                type="button"
+                onClick={toggleRecording}
+                className="text-[11px] font-semibold text-terracotta hover:underline ml-2"
+              >
+                Done Speaking
+              </button>
+            </div>
+          )}
+
+          {/* Transcribing audio indicator */}
+          {isTranscribingAudio && (
+            <div className="mx-5 mb-2 flex items-center gap-2 px-3 py-1.5 bg-olive/10 border border-olive/30 rounded-lg">
+              <Loader2 size={13} className="animate-spin text-olive shrink-0" />
+              <span className="text-xs text-olive font-medium">Transcribing speech with AI...</span>
+            </div>
+          )}
+
+          {/* Speech error banner */}
+          {speechError && (
+            <div className="mx-5 mb-2 flex items-center justify-between gap-2 px-3 py-1.5 bg-terracotta/10 border border-terracotta/30 rounded-lg text-xs text-terracotta">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <AlertCircle size={14} className="shrink-0" />
+                <span className="truncate">{speechError}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSpeechError(null)}
+                className="text-muted hover:text-charcoal p-0.5 shrink-0"
+              >
+                <X size={12} />
+              </button>
             </div>
           )}
 
@@ -257,24 +433,35 @@ export function AICommandCenter({ onScheduleUpdated }: AICommandCenterProps) {
         <div className="flex items-center justify-between px-4 py-2.5 border-t border-border-light bg-ivory/50">
           <div className="flex items-center gap-1">
             <button
+              type="button"
               onClick={toggleRecording}
-              disabled={!isSpeechSupported || isThinking}
+              disabled={!isVoiceSupported || isThinking || isTranscribingAudio}
               className={`p-2 rounded-lg transition-all duration-150 ${
                 isRecording
-                  ? 'bg-terracotta/15 text-terracotta'
-                  : isSpeechSupported
+                  ? 'bg-terracotta/20 text-terracotta ring-2 ring-terracotta/40 animate-pulse'
+                  : isTranscribingAudio
+                  ? 'bg-olive/15 text-olive'
+                  : isVoiceSupported
                   ? 'text-muted hover:bg-beige-light hover:text-charcoal'
                   : 'text-muted-light/50 cursor-not-allowed'
               }`}
               title={
-                isSpeechSupported
-                  ? isRecording
-                    ? 'Stop recording'
-                    : 'Start voice input'
-                  : 'Voice input not supported in this browser'
+                !isVoiceSupported
+                  ? 'Voice input not supported in this browser'
+                  : isRecording
+                  ? 'Click to stop recording'
+                  : isTranscribingAudio
+                  ? 'Transcribing audio...'
+                  : 'Start voice input (Speak your day)'
               }
             >
-              {isRecording ? <MicOff size={18} /> : <Mic size={18} />}
+              {isTranscribingAudio ? (
+                <Loader2 size={18} className="animate-spin" />
+              ) : isRecording ? (
+                <MicOff size={18} />
+              ) : (
+                <Mic size={18} />
+              )}
             </button>
 
             <button

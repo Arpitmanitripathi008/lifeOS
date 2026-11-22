@@ -306,6 +306,11 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ date }),
     }),
+  transcribeAudio: (data: { audioBase64: string; mimeType?: string }) =>
+    fetchJSON<{ transcript: string }>('/ai/transcribe-audio', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
   getProposals: (params?: { status?: string; targetDate?: string }) => {
     const query = new URLSearchParams(params as any).toString();
     return fetchJSON<any[]>(`/proposals${query ? `?${query}` : ''}`);

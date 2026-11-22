@@ -8,6 +8,11 @@ export const commandRequestSchema = z.object({
   prompt: z.string().min(1, 'Prompt is required'),
 });
 
+export const transcribeAudioSchema = z.object({
+  audioBase64: z.string().min(1, 'Audio data is required'),
+  mimeType: z.string().optional().default('audio/webm'),
+});
+
 export const breakdownRequestSchema = z.object({
   goalName: z.string().min(1, 'Goal name is required'),
   category: z.string().default('CODING'),
@@ -509,6 +514,16 @@ export async function handleCarryForward(req: Request, res: Response, next: Next
       recommendations: result.recommendations,
       proposal,
     });
+  } catch (error: any) {
+    next(error);
+  }
+}
+
+export async function handleTranscribeAudio(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { audioBase64, mimeType } = req.body;
+    const result = await GeminiService.transcribeAudio(audioBase64, mimeType);
+    res.json(result);
   } catch (error: any) {
     next(error);
   }

@@ -438,6 +438,43 @@ Return JSON:
       return fallbackCarryForward(incompleteTasks, upcomingScheduleContext);
     }
   }
+
+  /**
+   * Transcribe audio using Gemini multimodal audio model
+   */
+  static async transcribeAudio(
+    audioBase64: string,
+    mimeType: string = 'audio/webm'
+  ): Promise<{ transcript: string }> {
+    const { ai, model } = getGeminiClient();
+    if (!ai) {
+      throw new Error('Gemini API key is not configured in server/.env.');
+    }
+
+    const cleanMime = (mimeType || 'audio/webm').split(';')[0].trim();
+    const response = await ai.models.generateContent({
+      model,
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            {
+              inlineData: {
+                mimeType: cleanMime,
+                data: audioBase64,
+              },
+            },
+            {
+              text: 'You are an accurate audio transcription assistant for LifeOS. Transcribe all spoken words in this audio recording verbatim. Output only the plain transcribed text with no quotes, commentary, or markdown formatting.',
+            },
+          ],
+        },
+      ],
+    });
+
+    const transcript = response.text?.trim() || '';
+    return { transcript };
+  }
 }
 
 function parseTimeToMinutes(str: string): { hours: number; minutes: number } | null {
