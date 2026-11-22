@@ -14,13 +14,13 @@ export function AppLayout() {
 
       {/* Mobile sidebar overlay */}
       {sidebarOpen && (
-        <div className="fixed inset-0 z-40 lg:hidden">
+        <div className="fixed inset-0 z-50 lg:hidden flex">
           <div
-            className="absolute inset-0 bg-charcoal/30"
+            className="fixed inset-0 bg-charcoal/40 backdrop-blur-xs transition-opacity"
             onClick={() => setSidebarOpen(false)}
           />
           <Sidebar
-            className="relative z-50 shadow-xl"
+            className="relative z-50 shadow-2xl h-[100dvh] max-h-[100dvh]"
             onClose={() => setSidebarOpen(false)}
           />
         </div>

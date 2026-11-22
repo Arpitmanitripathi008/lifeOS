@@ -39,10 +39,10 @@ export function Sidebar({ className = '', onClose }: SidebarProps) {
 
   return (
     <aside
-      className={`flex flex-col w-64 bg-paper border-r border-border-light h-screen ${className}`}
+      className={`flex flex-col w-64 bg-paper border-r border-border-light h-[100dvh] max-h-[100dvh] select-none ${className}`}
     >
       {/* Logo */}
-      <div className="flex items-center justify-between px-5 py-5 border-b border-border-light">
+      <div className="flex items-center justify-between px-5 py-4 border-b border-border-light shrink-0">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-lg bg-olive flex items-center justify-center shadow-sm">
             <span className="text-paper text-sm font-serif font-bold">L</span>
@@ -64,7 +64,7 @@ export function Sidebar({ className = '', onClose }: SidebarProps) {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
+      <nav className="flex-1 px-3 py-3 space-y-0.5 overflow-y-auto">
         {navItems.map((item) => {
           const isActive = location.pathname === item.path;
           const Icon = item.icon;
@@ -95,10 +95,24 @@ export function Sidebar({ className = '', onClose }: SidebarProps) {
             </NavLink>
           );
         })}
+
+        {/* Quick Sign Out button inside nav list on mobile */}
+        <div className="pt-2 mt-2 border-t border-border-light/60 lg:hidden">
+          <button
+            onClick={() => {
+              if (onClose) onClose();
+              logout();
+            }}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-terracotta hover:bg-terracotta/10 transition-all duration-150"
+          >
+            <LogOut size={18} strokeWidth={1.5} className="text-terracotta" />
+            <span>Sign Out</span>
+          </button>
+        </div>
       </nav>
 
-      {/* User profile & Sign Out */}
-      <div className="px-4 py-3 border-t border-border-light bg-ivory/50">
+      {/* User profile & Sign Out Footer */}
+      <div className="px-4 py-3 border-t border-border-light bg-ivory/80 shrink-0">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="w-8 h-8 rounded-full bg-sage flex items-center justify-center text-olive-dark font-serif font-semibold text-xs shrink-0">
@@ -110,7 +124,10 @@ export function Sidebar({ className = '', onClose }: SidebarProps) {
             </div>
           </div>
           <button
-            onClick={() => logout()}
+            onClick={() => {
+              if (onClose) onClose();
+              logout();
+            }}
             title="Sign out of LifeOS"
             className="p-1.5 rounded-lg text-muted hover:text-terracotta hover:bg-terracotta/10 transition-colors shrink-0"
             aria-label="Sign out"

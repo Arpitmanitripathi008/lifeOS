@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { PageHeader } from '../components/ui/PageHeader';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
-import { User, Clock, Calendar, Zap, Save, Check, RotateCcw, Trash2, AlertTriangle, CheckCircle2, Loader2, X } from 'lucide-react';
+import { User, Clock, Calendar, Zap, Save, Check, RotateCcw, Trash2, AlertTriangle, CheckCircle2, Loader2, X, LogOut } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
 
 const WEEKDAYS = [
@@ -43,6 +44,7 @@ function SettingGroup({
 }
 
 export function Settings() {
+  const { user, logout } = useAuth();
   const [profile, setProfile] = useState<any>({
     displayName: 'Student',
     collegeStartTime: '09:00',
@@ -384,6 +386,29 @@ export function Settings() {
                 </span>
               </div>
             </div>
+          </div>
+        </SettingGroup>
+
+        {/* Account & Session */}
+        <SettingGroup
+          icon={User}
+          title="Account & Session"
+          description="Manage your active student profile and authentication state"
+        >
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl border border-border-light bg-ivory/50">
+            <div>
+              <p className="text-sm font-semibold text-charcoal">{profile.displayName || user?.fullName || 'Student'}</p>
+              <p className="text-xs text-muted">Signed in as <span className="font-mono font-medium text-charcoal">@{user?.username || 'student'}</span> ({user?.email})</p>
+            </div>
+            <Button
+              size="sm"
+              variant="secondary"
+              icon={LogOut}
+              className="text-terracotta hover:bg-terracotta/10 border-terracotta/30 self-start sm:self-auto"
+              onClick={() => logout()}
+            >
+              Sign Out
+            </Button>
           </div>
         </SettingGroup>
 
