@@ -17,6 +17,7 @@ import {
   AlertCircle,
   Clock,
   Trash2,
+  Pencil,
   FileCode,
   FileSpreadsheet,
   X,
@@ -42,9 +43,24 @@ export function Academics() {
 
   // Modals & Drawers
   const [showAddSubjectModal, setShowAddSubjectModal] = useState(false);
+  const [editingSubject, setEditingSubject] = useState<any | null>(null);
   const [showAddAssignmentModal, setShowAddAssignmentModal] = useState(false);
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [showStudyPlanModal, setShowStudyPlanModal] = useState(false);
+
+  // Unit modal & editing
+  const [showAddUnitModal, setShowAddUnitModal] = useState(false);
+  const [editingUnit, setEditingUnit] = useState<any | null>(null);
+  const [unitTargetSubjectId, setUnitTargetSubjectId] = useState('');
+  const [newUnitNumber, setNewUnitNumber] = useState(1);
+  const [newUnitTitle, setNewUnitTitle] = useState('');
+
+  // Topic modal & editing
+  const [showAddTopicModal, setShowAddTopicModal] = useState(false);
+  const [editingTopic, setEditingTopic] = useState<any | null>(null);
+  const [topicTargetUnitId, setTopicTargetUnitId] = useState('');
+  const [newTopicTitle, setNewTopicTitle] = useState('');
+  const [newTopicMinutes, setNewTopicMinutes] = useState(45);
 
   // Subject form
   const [subjectName, setSubjectName] = useState('');
@@ -200,22 +216,154 @@ export function Academics() {
     }
   };
 
+  const handleEditSubject = (sub: any) => {
+    setEditingSubject(sub);
+    setSubjectName(sub.name);
+    setSubjectCode(sub.code || '');
+    setShowAddSubjectModal(true);
+  };
+
   const handleCreateSubject = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!subjectName.trim()) return;
 
-    await api.createSubject({
-      name: subjectName,
-      code: subjectCode || null,
-      colorTag: '#68754C',
-    });
+    if (editingSubject) {
+      await api.updateSubject(editingSubject.id, {
+        name: subjectName.trim(),
+        code: subjectCode.trim() || null,
+      });
+      setSuccessMessage(`✓ Subject "${subjectName}" updated`);
+    } else {
+      await api.createSubject({
+        name: subjectName.trim(),
+        code: subjectCode.trim() || null,
+        colorTag: '#68754C',
+      });
+      setSuccessMessage(`✓ Subject "${subjectName}" created successfully`);
+    }
 
+    setEditingSubject(null);
     setSubjectName('');
     setSubjectCode('');
     setShowAddSubjectModal(false);
-    setSuccessMessage('✓ Subject created successfully');
     setTimeout(() => setSuccessMessage(null), 4000);
     loadData();
+  };
+
+  const handleOpenAddUnit = (sub: any) => {
+    setEditingUnit(null);
+    setUnitTargetSubjectId(sub.id);
+    setNewUnitNumber((sub.units?.length || 0) + 1);
+    setNewUnitTitle('');
+    setShowAddUnitModal(true);
+  };
+
+  const handleEditUnit = (unit: any) => {
+    setEditingUnit(unit);
+    setUnitTargetSubjectId(unit.subjectId);
+    setNewUnitNumber(unit.unitNumber);
+    setNewUnitTitle(unit.title);
+    setShowAddUnitModal(true);
+  };
+
+  const handleDeleteUnit = async (unit: any) => {
+    if (window.confirm(`Are you sure you want to delete Unit ${unit.unitNumber}: "${unit.title}" and its topics?`)) {
+      try {
+        await api.deleteUnit(unit.id);
+        setSuccessMessage(`✓ Unit ${unit.unitNumber} deleted`);
+        setTimeout(() => setSuccessMessage(null), 3000);
+        loadData();
+      } catch (err: any) {
+        alert(err.message || 'Error deleting unit');
+      }
+    }
+  };
+
+  const handleSaveUnit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newUnitTitle.trim()) return;
+
+    try {
+      if (editingUnit) {
+        await api.updateUnit(editingUnit.id, {
+          title: newUnitTitle.trim(),
+          unitNumber: Number(newUnitNumber),
+        });
+        setSuccessMessage(`✓ Unit ${newUnitNumber} updated`);
+      } else {
+        await api.addUnit(unitTargetSubjectId, {
+          title: newUnitTitle.trim(),
+          unitNumber: Number(newUnitNumber),
+        });
+        setSuccessMessage(`✓ Unit ${newUnitNumber} added`);
+      }
+      setShowAddUnitModal(false);
+      setEditingUnit(null);
+      setNewUnitTitle('');
+      setTimeout(() => setSuccessMessage(null), 3000);
+      loadData();
+    } catch (err: any) {
+      alert(err.message || 'Error saving unit');
+    }
+  };
+
+  const handleOpenAddTopic = (unit: any) => {
+    setEditingTopic(null);
+    setTopicTargetUnitId(unit.id);
+    setNewTopicTitle('');
+    setNewTopicMinutes(45);
+    setShowAddTopicModal(true);
+  };
+
+  const handleEditTopic = (topic: any, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditingTopic(topic);
+    setTopicTargetUnitId(topic.unitId);
+    setNewTopicTitle(topic.title);
+    setNewTopicMinutes(topic.estimatedMinutes || 45);
+    setShowAddTopicModal(true);
+  };
+
+  const handleDeleteTopic = async (topic: any, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (window.confirm(`Are you sure you want to delete topic "${topic.title}"?`)) {
+      try {
+        await api.deleteTopic(topic.id);
+        setSuccessMessage(`✓ Topic "${topic.title}" deleted`);
+        setTimeout(() => setSuccessMessage(null), 3000);
+        loadData();
+      } catch (err: any) {
+        alert(err.message || 'Error deleting topic');
+      }
+    }
+  };
+
+  const handleSaveTopic = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTopicTitle.trim()) return;
+
+    try {
+      if (editingTopic) {
+        await api.updateTopic(editingTopic.id, {
+          title: newTopicTitle.trim(),
+          estimatedMinutes: Number(newTopicMinutes),
+        });
+        setSuccessMessage(`✓ Topic "${newTopicTitle}" updated`);
+      } else {
+        await api.addTopic(topicTargetUnitId, {
+          title: newTopicTitle.trim(),
+          estimatedMinutes: Number(newTopicMinutes),
+        });
+        setSuccessMessage(`✓ Topic "${newTopicTitle}" added`);
+      }
+      setShowAddTopicModal(false);
+      setEditingTopic(null);
+      setNewTopicTitle('');
+      setTimeout(() => setSuccessMessage(null), 3000);
+      loadData();
+    } catch (err: any) {
+      alert(err.message || 'Error saving topic');
+    }
   };
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -373,7 +521,16 @@ export function Academics() {
                 Add Assignment
               </Button>
             ) : (
-              <Button size="sm" icon={Plus} onClick={() => setShowAddSubjectModal(true)}>
+              <Button
+                size="sm"
+                icon={Plus}
+                onClick={() => {
+                  setEditingSubject(null);
+                  setSubjectName('');
+                  setSubjectCode('');
+                  setShowAddSubjectModal(true);
+                }}
+              >
                 Add Subject
               </Button>
             )}
@@ -453,7 +610,17 @@ export function Academics() {
                 >
                   Upload Syllabus
                 </Button>
-                <Button variant="secondary" icon={Plus} size="sm" onClick={() => setShowAddSubjectModal(true)}>
+                <Button
+                  variant="secondary"
+                  icon={Plus}
+                  size="sm"
+                  onClick={() => {
+                    setEditingSubject(null);
+                    setSubjectName('');
+                    setSubjectCode('');
+                    setShowAddSubjectModal(true);
+                  }}
+                >
                   Add Manually
                 </Button>
               </div>
@@ -500,6 +667,21 @@ export function Academics() {
                         Generate Study Plan
                       </Button>
                       <button
+                        onClick={() => handleOpenAddUnit(sub)}
+                        className="px-2 py-1 rounded-lg text-muted hover:text-olive hover:bg-olive/10 transition-colors flex items-center gap-1 text-xs font-medium"
+                        title="Add unit to this subject"
+                      >
+                        <Plus size={14} />
+                        <span className="hidden sm:inline">Add Unit</span>
+                      </button>
+                      <button
+                        onClick={() => handleEditSubject(sub)}
+                        className="p-1.5 rounded-lg text-muted hover:text-olive hover:bg-olive/10 transition-colors"
+                        title={`Edit ${sub.name}`}
+                      >
+                        <Pencil size={16} />
+                      </button>
+                      <button
                         onClick={() => handleDeleteSubject(sub)}
                         className="p-1.5 rounded-lg text-muted hover:text-terracotta hover:bg-terracotta/10 transition-colors"
                         title={`Delete ${sub.name}`}
@@ -512,19 +694,44 @@ export function Academics() {
                   <ProgressBar value={progress} color="olive" />
 
                   {/* Units breakdown */}
-                  {sub.units && sub.units.length > 0 && (
+                  {sub.units && sub.units.length > 0 ? (
                     <div className="mt-4 pt-4 border-t border-border-light space-y-3">
                       {sub.units.map((unit: any) => (
                         <div key={unit.id} className="bg-ivory/60 rounded-lg p-3">
-                          <p className="text-xs font-semibold text-charcoal mb-2">
-                            Unit {unit.unitNumber}: {unit.title}
-                          </p>
+                          <div className="flex items-center justify-between mb-2">
+                            <p className="text-xs font-semibold text-charcoal">
+                              Unit {unit.unitNumber}: {unit.title}
+                            </p>
+                            <div className="flex items-center gap-1">
+                              <button
+                                onClick={() => handleOpenAddTopic(unit)}
+                                className="px-1.5 py-0.5 rounded text-[11px] font-medium text-olive hover:bg-olive/10 transition-colors flex items-center gap-1"
+                                title="Add topic to this unit"
+                              >
+                                <Plus size={12} /> Topic
+                              </button>
+                              <button
+                                onClick={() => handleEditUnit(unit)}
+                                className="p-1 rounded text-muted hover:text-olive hover:bg-olive/10 transition-colors"
+                                title={`Edit Unit ${unit.unitNumber}`}
+                              >
+                                <Pencil size={13} />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteUnit(unit)}
+                                className="p-1 rounded text-muted hover:text-terracotta hover:bg-terracotta/10 transition-colors"
+                                title={`Delete Unit ${unit.unitNumber}`}
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            </div>
+                          </div>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                             {unit.topics?.map((topic: any) => (
                               <div
                                 key={topic.id}
                                 onClick={() => handleToggleTopic(topic.id)}
-                                className={`flex items-center justify-between p-2 rounded-md border text-xs cursor-pointer transition-colors ${
+                                className={`group flex items-center justify-between p-2 rounded-md border text-xs cursor-pointer transition-colors ${
                                   topic.isCompleted
                                     ? 'bg-sage/15 border-sage/40 text-muted line-through'
                                     : 'bg-paper border-border-light hover:border-olive text-charcoal'
@@ -538,14 +745,47 @@ export function Academics() {
                                   )}
                                   <span className="truncate">{topic.title}</span>
                                 </div>
-                                <span className="text-[10px] text-muted-light font-mono ml-2 shrink-0">
-                                  {topic.estimatedMinutes}m
-                                </span>
+                                <div className="flex items-center gap-1 shrink-0 ml-2">
+                                  <span className="text-[10px] text-muted-light font-mono">
+                                    {topic.estimatedMinutes}m
+                                  </span>
+                                  <button
+                                    onClick={(e) => handleEditTopic(topic, e)}
+                                    className="p-1 rounded text-muted hover:text-olive hover:bg-olive/10 transition-colors"
+                                    title={`Edit "${topic.title}"`}
+                                  >
+                                    <Pencil size={12} />
+                                  </button>
+                                  <button
+                                    onClick={(e) => handleDeleteTopic(topic, e)}
+                                    className="p-1 rounded text-muted hover:text-terracotta hover:bg-terracotta/10 transition-colors"
+                                    title={`Delete "${topic.title}"`}
+                                  >
+                                    <Trash2 size={12} />
+                                  </button>
+                                </div>
                               </div>
                             ))}
+                            {(!unit.topics || unit.topics.length === 0) && (
+                              <div className="text-[11px] text-muted-light italic col-span-2 py-1">
+                                No topics in this unit. Click "+ Topic" above to add topics.
+                              </div>
+                            )}
                           </div>
                         </div>
                       ))}
+                    </div>
+                  ) : (
+                    <div className="mt-4 pt-4 border-t border-border-light flex items-center justify-between py-2 text-xs text-muted">
+                      <span>No units added to this syllabus yet.</span>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        icon={Plus}
+                        onClick={() => handleOpenAddUnit(sub)}
+                      >
+                        Add First Unit
+                      </Button>
                     </div>
                   )}
                 </Card>
@@ -1125,11 +1365,13 @@ export function Academics() {
         </div>
       )}
 
-      {/* Manual Add Subject Modal */}
+      {/* Add / Edit Subject Modal */}
       {showAddSubjectModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-charcoal/30 backdrop-blur-xs p-4">
           <div className="bg-paper rounded-xl border border-border-light shadow-xl max-w-md w-full p-5">
-            <h3 className="text-base font-semibold text-charcoal mb-4">Add New Subject</h3>
+            <h3 className="text-base font-semibold text-charcoal mb-4">
+              {editingSubject ? 'Edit Subject' : 'Add New Subject'}
+            </h3>
             <form onSubmit={handleCreateSubject} className="space-y-4">
               <div>
                 <label className="block text-xs font-medium text-muted mb-1">Subject Name</label>
@@ -1155,11 +1397,122 @@ export function Academics() {
               </div>
 
               <div className="flex items-center justify-end gap-2 pt-2 border-t border-border-light">
-                <Button type="button" variant="ghost" size="sm" onClick={() => setShowAddSubjectModal(false)}>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setEditingSubject(null);
+                    setShowAddSubjectModal(false);
+                  }}
+                >
                   Cancel
                 </Button>
                 <Button type="submit" size="sm">
-                  Save Subject
+                  {editingSubject ? 'Update Subject' : 'Save Subject'}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Add / Edit Unit Modal */}
+      {showAddUnitModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-charcoal/30 backdrop-blur-xs p-4">
+          <div className="bg-paper rounded-xl border border-border-light shadow-xl max-w-md w-full p-5">
+            <h3 className="text-base font-semibold text-charcoal mb-4">
+              {editingUnit ? `Edit Unit ${editingUnit.unitNumber}` : 'Add New Unit'}
+            </h3>
+            <form onSubmit={handleSaveUnit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-muted mb-1">Unit Number</label>
+                <input
+                  type="number"
+                  min={1}
+                  required
+                  value={newUnitNumber}
+                  onChange={(e) => setNewUnitNumber(Number(e.target.value))}
+                  className="w-full px-3 py-2 rounded-lg border border-border-light bg-ivory text-sm text-charcoal focus:outline-none focus:ring-2 focus:ring-olive/30"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-muted mb-1">Unit Title</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Memory Architecture & Cache"
+                  value={newUnitTitle}
+                  onChange={(e) => setNewUnitTitle(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border border-border-light bg-ivory text-sm text-charcoal focus:outline-none focus:ring-2 focus:ring-olive/30"
+                />
+              </div>
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-border-light">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setEditingUnit(null);
+                    setShowAddUnitModal(false);
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" size="sm">
+                  {editingUnit ? 'Update Unit' : 'Save Unit'}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Add / Edit Topic Modal */}
+      {showAddTopicModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-charcoal/30 backdrop-blur-xs p-4">
+          <div className="bg-paper rounded-xl border border-border-light shadow-xl max-w-md w-full p-5">
+            <h3 className="text-base font-semibold text-charcoal mb-4">
+              {editingTopic ? 'Edit Topic' : 'Add New Topic'}
+            </h3>
+            <form onSubmit={handleSaveTopic} className="space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-muted mb-1">Topic Title</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Direct Mapped vs Associative Cache"
+                  value={newTopicTitle}
+                  onChange={(e) => setNewTopicTitle(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border border-border-light bg-ivory text-sm text-charcoal focus:outline-none focus:ring-2 focus:ring-olive/30"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-muted mb-1">Estimated Minutes</label>
+                <input
+                  type="number"
+                  min={10}
+                  step={5}
+                  required
+                  value={newTopicMinutes}
+                  onChange={(e) => setNewTopicMinutes(Number(e.target.value))}
+                  className="w-full px-3 py-2 rounded-lg border border-border-light bg-ivory text-sm text-charcoal focus:outline-none focus:ring-2 focus:ring-olive/30"
+                />
+              </div>
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-border-light">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setEditingTopic(null);
+                    setShowAddTopicModal(false);
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" size="sm">
+                  {editingTopic ? 'Update Topic' : 'Save Topic'}
                 </Button>
               </div>
             </form>

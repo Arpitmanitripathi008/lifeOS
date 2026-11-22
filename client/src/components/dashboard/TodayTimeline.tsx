@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Card } from '../ui/Card';
-import { Calendar, Plus, CheckCircle2, Circle, Clock, Sparkles, RotateCcw, Trash2 } from 'lucide-react';
+import { Calendar, Plus, CheckCircle2, Circle, Clock, Sparkles, RotateCcw, Trash2, Pencil } from 'lucide-react';
 import { EmptyState } from '../ui/EmptyState';
 import { Button } from '../ui/Button';
 import { api } from '../../services/api';
@@ -9,6 +9,7 @@ export function TodayTimeline() {
   const [schedule, setSchedule] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editingTask, setEditingTask] = useState<any | null>(null);
   const [undoing, setUndoing] = useState(false);
 
   const [newTitle, setNewTitle] = useState('');
@@ -43,6 +44,20 @@ export function TodayTimeline() {
     loadSchedule();
   };
 
+  const handleEditTask = (task: any, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditingTask(task);
+    setNewTitle(task.title || '');
+    setNewCategory(task.category || 'DEADLINE');
+    setNewPriority(task.priority || 'MEDIUM');
+    setNewDuration(task.estimatedDuration || 45);
+    setNewStartTime(task.startTime || task.scheduledStartTime || '');
+    setNewScheduledDate(task.scheduledDate || schedule?.date || new Date().toISOString().split('T')[0]);
+    setNewDeadline(task.deadline || '');
+    setNewSubjectId(task.subjectId || '');
+    setShowAddModal(true);
+  };
+
   const handleDeleteTask = async (task: any, e: React.MouseEvent) => {
     e.stopPropagation();
     if (window.confirm(`Are you sure you want to delete task "${task.title}"?`)) {
@@ -60,7 +75,7 @@ export function TodayTimeline() {
     if (!newTitle.trim()) return;
 
     const today = new Date().toISOString().split('T')[0];
-    await api.createTask({
+    const payload = {
       title: newTitle,
       category: newCategory,
       priority: newPriority,
@@ -69,8 +84,15 @@ export function TodayTimeline() {
       scheduledStartTime: newStartTime || null,
       deadline: newDeadline || null,
       subjectId: newSubjectId || null,
-    });
+    };
 
+    if (editingTask) {
+      await api.updateTask(editingTask.id, payload);
+    } else {
+      await api.createTask(payload);
+    }
+
+    setEditingTask(null);
     setNewTitle('');
     setNewStartTime('');
     setNewDeadline('');
@@ -103,7 +125,19 @@ export function TodayTimeline() {
           <h2 className="text-sm font-semibold text-charcoal">Today's Schedule</h2>
           <p className="text-xs text-muted">Fixed commitments and flexible tasks</p>
         </div>
-        <Button variant="ghost" size="sm" icon={Plus} onClick={() => setShowAddModal(true)}>
+        <Button
+          variant="ghost"
+          size="sm"
+          icon={Plus}
+          onClick={() => {
+            setEditingTask(null);
+            setNewTitle('');
+            setNewStartTime('');
+            setNewDeadline('');
+            setNewSubjectId('');
+            setShowAddModal(true);
+          }}
+        >
           Add Task
         </Button>
       </div>
@@ -227,13 +261,22 @@ export function TodayTimeline() {
                       Fixed
                     </span>
                   ) : (
-                    <button
-                      onClick={(e) => handleDeleteTask(item, e)}
-                      className="p-1 rounded text-muted hover:text-terracotta hover:bg-terracotta/10 transition-colors"
-                      title={`Delete "${item.title}"`}
-                    >
-                      <Trash2 size={15} />
-                    </button>
+                    <>
+                      <button
+                        onClick={(e) => handleEditTask(item, e)}
+                        className="p-1 rounded text-muted hover:text-olive hover:bg-olive/10 transition-colors"
+                        title={`Edit "${item.title}"`}
+                      >
+                        <Pencil size={15} />
+                      </button>
+                      <button
+                        onClick={(e) => handleDeleteTask(item, e)}
+                        className="p-1 rounded text-muted hover:text-terracotta hover:bg-terracotta/10 transition-colors"
+                        title={`Delete "${item.title}"`}
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </>
                   )}
                 </div>
               </div>
@@ -246,7 +289,9 @@ export function TodayTimeline() {
       {showAddModal && (
         <div className="fixed inset-0 bg-charcoal/30 backdrop-blur-xs flex items-center justify-center p-4 z-50">
           <div className="bg-paper rounded-2xl max-w-md w-full p-6 shadow-xl border border-border-light">
-            <h3 className="text-base font-semibold text-charcoal mb-4">Add Task</h3>
+            <h3 className="text-base font-semibold text-charcoal mb-4">
+              {editingTask ? 'Edit Task' : 'Add Task'}
+            </h3>
             <form onSubmit={handleCreateTask} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-charcoal mb-1">Title</label>
@@ -354,11 +399,14 @@ export function TodayTimeline() {
               </p>
 
               <div className="flex justify-end gap-2 pt-3 border-t border-border-light">
-                <Button variant="ghost" size="sm" type="button" onClick={() => setShowAddModal(false)}>
+                <Button variant="ghost" size="sm" type="button" onClick={() => {
+                  setEditingTask(null);
+                  setShowAddModal(false);
+                }}>
                   Cancel
                 </Button>
                 <Button size="sm" type="submit">
-                  Save Task
+                  {editingTask ? 'Update Task' : 'Save Task'}
                 </Button>
               </div>
             </form>

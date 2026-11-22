@@ -18,6 +18,7 @@ import {
   RefreshCw,
   SlidersHorizontal,
   Trash2,
+  Pencil,
 } from 'lucide-react';
 import { api } from '../services/api';
 
@@ -34,6 +35,7 @@ export function Planner() {
 
   // Modals
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editingTask, setEditingTask] = useState<any | null>(null);
   const [showGenerateModal, setShowGenerateModal] = useState(false);
   const [showModifyModal, setShowModifyModal] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -113,11 +115,25 @@ export function Planner() {
     }
   };
 
+  const handleEditTask = (task: any, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setEditingTask(task);
+    setNewTitle(task.title || '');
+    setNewCategory(task.category || 'DEADLINE');
+    setNewPriority(task.priority || 'MEDIUM');
+    setNewDuration(task.estimatedDuration || 45);
+    setNewTime(task.scheduledStartTime || '');
+    setTaskScheduledDate(task.scheduledDate || currentDate);
+    setTaskDeadline(task.deadline || '');
+    setTaskSubjectId(task.subjectId || '');
+    setShowAddModal(true);
+  };
+
   const handleAddTask = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTitle.trim()) return;
 
-    await api.createTask({
+    const payload = {
       title: newTitle,
       category: newCategory,
       priority: newPriority,
@@ -126,8 +142,18 @@ export function Planner() {
       scheduledStartTime: newTime || null,
       deadline: taskDeadline || null,
       subjectId: taskSubjectId || null,
-    });
+    };
 
+    if (editingTask) {
+      await api.updateTask(editingTask.id, payload);
+      setActionSuccess(`Task "${newTitle}" updated.`);
+    } else {
+      await api.createTask(payload);
+      setActionSuccess(`Task "${newTitle}" created.`);
+    }
+    setTimeout(() => setActionSuccess(null), 3000);
+
+    setEditingTask(null);
     setNewTitle('');
     setNewTime('');
     setTaskDeadline('');
@@ -252,7 +278,19 @@ export function Planner() {
             >
               Generate Plan
             </Button>
-            <Button icon={Plus} size="sm" onClick={() => setShowAddModal(true)}>
+            <Button
+              icon={Plus}
+              size="sm"
+              onClick={() => {
+                setEditingTask(null);
+                setNewTitle('');
+                setNewTime('');
+                setTaskDeadline('');
+                setTaskSubjectId('');
+                setTaskScheduledDate(currentDate);
+                setShowAddModal(true);
+              }}
+            >
               Add Task
             </Button>
           </div>
@@ -596,10 +634,17 @@ export function Planner() {
                             )}
                           </div>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5">
                           <span className="text-[11px] font-mono text-muted">
                             {t.scheduledStartTime} – {t.scheduledEndTime || '—'} ({t.estimatedDuration}m)
                           </span>
+                          <button
+                            onClick={(e) => handleEditTask(t, e)}
+                            className="p-1 rounded text-muted hover:text-olive hover:bg-olive/10 transition-colors"
+                            title={`Edit "${t.title}"`}
+                          >
+                            <Pencil size={14} />
+                          </button>
                           <button
                             onClick={(e) => handleDeleteTask(t.id, t.title, e)}
                             className="p-1 rounded text-muted hover:text-terracotta hover:bg-terracotta/10 transition-colors"
@@ -615,6 +660,58 @@ export function Planner() {
               );
             })}
           </div>
+
+          {/* Unscheduled / Flexible Tasks for this Day */}
+          {tasks.filter((t: any) => !t.scheduledStartTime).length > 0 && (
+            <div className="mt-4 pt-3 border-t border-border-light">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-xs font-semibold text-charcoal flex items-center gap-1.5">
+                  <Clock size={13} className="text-olive" />
+                  Flexible & Unscheduled Tasks ({tasks.filter((t: any) => !t.scheduledStartTime).length})
+                </h3>
+                <span className="text-[11px] text-muted">Click to toggle done, or edit to assign a specific time</span>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                {tasks.filter((t: any) => !t.scheduledStartTime).map((t: any) => (
+                  <div
+                    key={t.id}
+                    onClick={() => handleToggleTask(t.id, t.status)}
+                    className={`px-3 py-2 rounded-lg border text-xs cursor-pointer flex items-center justify-between transition-all ${
+                      t.status === 'COMPLETED'
+                        ? 'bg-sage/15 border-sage/40 line-through text-muted'
+                        : 'bg-paper border-border-light hover:border-olive text-charcoal'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      {t.status === 'COMPLETED' ? (
+                        <CheckCircle2 size={15} className="text-olive shrink-0" />
+                      ) : (
+                        <Circle size={15} className="text-muted shrink-0 hover:text-olive" />
+                      )}
+                      <span className="font-medium text-charcoal truncate">{t.title}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                      <span className="text-[10px] font-mono text-muted">{t.estimatedDuration}m</span>
+                      <button
+                        onClick={(e) => handleEditTask(t, e)}
+                        className="p-1 rounded text-muted hover:text-olive hover:bg-olive/10 transition-colors"
+                        title={`Edit "${t.title}"`}
+                      >
+                        <Pencil size={13} />
+                      </button>
+                      <button
+                        onClick={(e) => handleDeleteTask(t.id, t.title, e)}
+                        className="p-1 rounded text-muted hover:text-terracotta hover:bg-terracotta/10 transition-colors"
+                        title={`Delete "${t.title}"`}
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </Card>
       ) : view === 'week' ? (
         /* WEEK VIEW */
@@ -947,7 +1044,9 @@ export function Planner() {
       {showAddModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-charcoal/30 backdrop-blur-xs p-4">
           <div className="bg-paper rounded-xl border border-border-light shadow-xl max-w-md w-full p-5">
-            <h3 className="text-base font-semibold text-charcoal mb-4">Add Task to Planner</h3>
+            <h3 className="text-base font-semibold text-charcoal mb-4">
+              {editingTask ? 'Edit Task' : 'Add Task to Planner'}
+            </h3>
             <form onSubmit={handleAddTask} className="space-y-4">
               <div>
                 <label className="block text-xs font-medium text-muted mb-1">Task Title</label>
@@ -1056,11 +1155,19 @@ export function Planner() {
               </p>
 
               <div className="flex items-center justify-end gap-2 pt-2 border-t border-border-light">
-                <Button type="button" variant="ghost" size="sm" onClick={() => setShowAddModal(false)}>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setEditingTask(null);
+                    setShowAddModal(false);
+                  }}
+                >
                   Cancel
                 </Button>
                 <Button type="submit" size="sm">
-                  Save Task
+                  {editingTask ? 'Update Task' : 'Save Task'}
                 </Button>
               </div>
             </form>

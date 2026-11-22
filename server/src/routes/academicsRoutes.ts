@@ -2,9 +2,14 @@ import { Router } from 'express';
 import {
   getSubjects,
   createSubject,
+  updateSubject,
   deleteSubject,
   addUnit,
+  updateUnit,
+  deleteUnit,
   addTopic,
+  updateTopic,
+  deleteTopic,
   toggleTopic,
   getExams,
   createExam,
@@ -14,8 +19,11 @@ import {
   updateAssignment,
   deleteAssignment,
   createSubjectSchema,
+  updateSubjectSchema,
   createUnitSchema,
+  updateUnitSchema,
   createTopicSchema,
+  updateTopicSchema,
   createExamSchema,
   createAssignmentSchema,
   generateExamStudyPlan,
@@ -27,11 +35,17 @@ const router = Router();
 // Subjects
 router.get('/subjects', getSubjects);
 router.post('/subjects', validate(createSubjectSchema), createSubject);
+router.patch('/subjects/:id', validate(updateSubjectSchema), updateSubject);
 router.delete('/subjects/:id', deleteSubject);
 
 // Units & Topics
 router.post('/subjects/:subjectId/units', validate(createUnitSchema), addUnit);
+router.patch('/units/:id', validate(updateUnitSchema), updateUnit);
+router.delete('/units/:id', deleteUnit);
+
 router.post('/units/:unitId/topics', validate(createTopicSchema), addTopic);
+router.patch('/topics/:id', validate(updateTopicSchema), updateTopic);
+router.delete('/topics/:id', deleteTopic);
 router.patch('/topics/:id/toggle', toggleTopic);
 
 // Exams

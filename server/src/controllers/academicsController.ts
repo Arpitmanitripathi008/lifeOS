@@ -9,14 +9,27 @@ export const createSubjectSchema = z.object({
   colorTag: z.string().default('#68754C'),
 });
 
+export const updateSubjectSchema = createSubjectSchema.partial();
+
 export const createUnitSchema = z.object({
   unitNumber: z.number().int().positive(),
   title: z.string().min(1, 'Title is required'),
 });
 
+export const updateUnitSchema = z.object({
+  unitNumber: z.number().int().positive().optional(),
+  title: z.string().min(1).optional(),
+});
+
 export const createTopicSchema = z.object({
   title: z.string().min(1, 'Title is required'),
   estimatedMinutes: z.number().int().positive().default(45),
+});
+
+export const updateTopicSchema = z.object({
+  title: z.string().min(1).optional(),
+  estimatedMinutes: z.number().int().positive().optional(),
+  isCompleted: z.boolean().optional(),
 });
 
 export const createExamSchema = z.object({
@@ -75,6 +88,25 @@ export async function createSubject(req: AuthRequest, res: Response, next: NextF
       },
     });
     res.status(201).json(subject);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function updateSubject(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const userId = req.user!.id;
+    const id = req.params.id as string;
+    const existing = await prisma.subject.findFirst({ where: { id, userId } });
+    if (!existing) {
+      return res.status(404).json({ error: 'Subject not found or access denied.' });
+    }
+
+    const updated = await prisma.subject.update({
+      where: { id },
+      data: req.body,
+    });
+    res.json(updated);
   } catch (error) {
     next(error);
   }
@@ -154,6 +186,63 @@ export async function addUnit(req: AuthRequest, res: Response, next: NextFunctio
   }
 }
 
+export async function updateUnit(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const userId = req.user!.id;
+    const id = req.params.id as string;
+    const unit = await prisma.unit.findUnique({
+      where: { id },
+      include: { subject: true },
+    });
+    if (!unit || unit.subject.userId !== userId) {
+      return res.status(404).json({ error: 'Unit not found or access denied.' });
+    }
+
+    const updated = await prisma.unit.update({
+      where: { id },
+      data: req.body,
+      include: { topics: true },
+    });
+    res.json(updated);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function deleteUnit(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const userId = req.user!.id;
+    const id = req.params.id as string;
+    const unit = await prisma.unit.findUnique({
+      where: { id },
+      include: { subject: true },
+    });
+    if (!unit || unit.subject.userId !== userId) {
+      return res.status(404).json({ error: 'Unit not found or access denied.' });
+    }
+
+    await prisma.$transaction(async (tx) => {
+      const topics = await tx.unitTopic.findMany({
+        where: { unitId: id },
+        select: { id: true },
+      });
+      const topicIds = topics.map((t) => t.id);
+      if (topicIds.length > 0) {
+        await tx.task.updateMany({
+          where: { unitTopicId: { in: topicIds } },
+          data: { unitTopicId: null },
+        });
+        await tx.unitTopic.deleteMany({ where: { unitId: id } });
+      }
+      await tx.unit.delete({ where: { id } });
+    });
+
+    res.status(204).send();
+  } catch (error) {
+    next(error);
+  }
+}
+
 export async function addTopic(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const userId = req.user!.id;
@@ -173,6 +262,54 @@ export async function addTopic(req: AuthRequest, res: Response, next: NextFuncti
       },
     });
     res.status(201).json(topic);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function updateTopic(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const userId = req.user!.id;
+    const id = req.params.id as string;
+    const topic = await prisma.unitTopic.findUnique({
+      where: { id },
+      include: { unit: { include: { subject: true } } },
+    });
+    if (!topic || topic.unit.subject.userId !== userId) {
+      return res.status(404).json({ error: 'Topic not found or access denied.' });
+    }
+
+    const updated = await prisma.unitTopic.update({
+      where: { id },
+      data: req.body,
+    });
+    res.json(updated);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function deleteTopic(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const userId = req.user!.id;
+    const id = req.params.id as string;
+    const topic = await prisma.unitTopic.findUnique({
+      where: { id },
+      include: { unit: { include: { subject: true } } },
+    });
+    if (!topic || topic.unit.subject.userId !== userId) {
+      return res.status(404).json({ error: 'Topic not found or access denied.' });
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.task.updateMany({
+        where: { unitTopicId: id },
+        data: { unitTopicId: null },
+      });
+      await tx.unitTopic.delete({ where: { id } });
+    });
+
+    res.status(204).send();
   } catch (error) {
     next(error);
   }

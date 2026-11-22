@@ -136,8 +136,37 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(data),
     }),
+  updateSubject: (id: string, data: any) =>
+    fetchJSON<any>(`/academics/subjects/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
   deleteSubject: (id: string) =>
     fetchJSON<void>(`/academics/subjects/${id}`, { method: 'DELETE' }),
+  addUnit: (subjectId: string, data: any) =>
+    fetchJSON<any>(`/academics/subjects/${subjectId}/units`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  updateUnit: (id: string, data: any) =>
+    fetchJSON<any>(`/academics/units/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+  deleteUnit: (id: string) =>
+    fetchJSON<void>(`/academics/units/${id}`, { method: 'DELETE' }),
+  addTopic: (unitId: string, data: any) =>
+    fetchJSON<any>(`/academics/units/${unitId}/topics`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  updateTopic: (id: string, data: any) =>
+    fetchJSON<any>(`/academics/topics/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+  deleteTopic: (id: string) =>
+    fetchJSON<void>(`/academics/topics/${id}`, { method: 'DELETE' }),
   toggleTopic: (id: string) =>
     fetchJSON<any>(`/academics/topics/${id}/toggle`, { method: 'PATCH' }),
   getExams: () => fetchJSON<any[]>('/academics/exams'),
