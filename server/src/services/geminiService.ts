@@ -239,9 +239,9 @@ Current Context:
 
 Rules:
 1. HOLIDAY & TIMETABLE OVERRIDE DETECTION:
-   - If user states "Today is a holiday", "No college today", "College is cancelled today", "Class cancelled":
-     set intent: "HOLIDAY_DECLARATION", set holidayDeclaration: { isHoliday: true, targetDate: "${todayDate}", type: "FULL_HOLIDAY", reason: "User declared holiday" }, suggestedScheduleAction: "APPLY_HOLIDAY".
-   - If user states "Tomorrow there will be no college", "No college tomorrow", "Tomorrow is a holiday":
+   - If user states "Today is a holiday", "No college today", "College is cancelled today", "Class cancelled", "I will not go to college today", "Not going to college today", "Skipping college today", "Taking a leave today":
+     set intent: "HOLIDAY_DECLARATION", set holidayDeclaration: { isHoliday: true, targetDate: "${todayDate}", type: "FULL_HOLIDAY", reason: "User not attending college / holiday declared" }, suggestedScheduleAction: "APPLY_HOLIDAY".
+   - If user states "Tomorrow there will be no college", "No college tomorrow", "Tomorrow is a holiday", "I won't go to college tomorrow":
      set intent: "HOLIDAY_DECLARATION", set holidayDeclaration: { isHoliday: true, targetDate: "${tomorrowDate}", type: "CANCEL_CLASSES", reason: "User declared tomorrow holiday" }, suggestedScheduleAction: "APPLY_HOLIDAY".
    - If user states "I have only half-day college today", "Half day today":
      set intent: "SCHEDULE_OVERRIDE", set holidayDeclaration: { isHoliday: true, targetDate: "${todayDate}", type: "HALF_DAY", adjustedStartTime: "09:00", adjustedEndTime: "12:00", reason: "Half-day college" }.
@@ -594,6 +594,12 @@ export function fallbackProcessCommand(
   const isHoliday =
     lower.includes('holiday') ||
     lower.includes('no college') ||
+    lower.includes('not go to college') ||
+    lower.includes('not going to college') ||
+    lower.includes('skipping college') ||
+    lower.includes('skip college') ||
+    lower.includes('bunking college') ||
+    lower.includes('leave from college') ||
     lower.includes('college is cancelled') ||
     lower.includes('college is canceled') ||
     lower.includes('college cancelled') ||
