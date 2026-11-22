@@ -31,6 +31,7 @@ export interface SchedulingContext {
   dayOfWeek?: number;         // 0 = Sunday, 1 = Monday ... 6 = Saturday
   weeklyHolidays?: number[];  // e.g. [0] for Sunday, [0, 6] for Sat+Sun
   weeklyCollegeTimings?: Record<string, { start: string; end: string }>; // e.g. { "1": { start: "09:00", end: "15:00" } }
+  collegeHours?: { start: string; end: string }; // Default routine college hours from user profile
   activeOverride?: {
     id?: string;
     overrideType: string;
@@ -322,6 +323,35 @@ export class AdaptiveScheduler {
       }
     }
 
+    // 1.5 Auto-Schedule College Commitment from Profile if not explicitly in fixedCommitments table
+    if (!collegeCommitmentFound && !isWeeklyHoliday && !isFullHolidayOverride) {
+      const collegeStart = context.collegeHours?.start || '09:00';
+      const collegeEnd = context.collegeHours?.end || '15:00';
+      const cStart = timeToMinutes(collegeStart);
+      const cEnd = timeToMinutes(collegeEnd);
+
+      if (cEnd > effectiveStartCursor) {
+        const actualStart = Math.max(effectiveStartCursor, cStart);
+        scheduled.push({
+          title: 'College Classes',
+          category: 'FIXED',
+          priority: 'URGENT',
+          startTime: minutesToTime(actualStart),
+          endTime: collegeEnd,
+          durationMinutes: cEnd - actualStart,
+          isFixed: true,
+          reason: 'Regular weekly college timetable (protected)',
+        });
+
+        // Block college classes + 20m post-college transition buffer for travel/decompression
+        blockedIntervals.push({
+          start: actualStart,
+          end: Math.min(horizonEndMinutes, cEnd + 20),
+          title: 'College Classes & Post-College Buffer',
+        });
+      }
+    }
+
     // 2. Lock in User-Specified Unavailable Windows (e.g. "Cannot work 4 PM - 6 PM")
     if (context.unavailableWindows) {
       for (const w of context.unavailableWindows) {
@@ -551,8 +581,8 @@ export class AdaptiveScheduler {
             personalGoalId: item.personalGoalId,
           });
 
-          // Insert 10m health buffer after the task
-          const bufferDuration = 10;
+          // Insert 15m health buffer after each focused task to prevent cognitive burnout
+          const bufferDuration = 15;
           const newStart = taskEnd + bufferDuration;
           win.start = newStart;
           win.duration = win.end - newStart;

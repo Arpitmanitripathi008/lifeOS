@@ -232,7 +232,7 @@ export function AICommandCenter({ onScheduleUpdated }: AICommandCenterProps) {
     setIsRecording(false);
 
     // 1. If Web Speech API has captured transcript, execute immediately!
-    const textFromSpeech = currentTranscriptRef.current.trim();
+    const textFromSpeech = (currentTranscriptRef.current || liveTranscript).trim();
     if (textFromSpeech.length > 0) {
       setLiveTranscript(textFromSpeech);
       setInput(textFromSpeech);
@@ -244,8 +244,6 @@ export function AICommandCenter({ onScheduleUpdated }: AICommandCenterProps) {
     // 2. Otherwise transcribe recorded audio chunks using Gemini AI
     setIsTranscribingAudio(true);
     setSpeechError(null);
-
-    await new Promise((r) => setTimeout(r, 350));
 
     const chunks = audioChunksRef.current;
     if (chunks.length === 0) {
@@ -366,7 +364,7 @@ export function AICommandCenter({ onScheduleUpdated }: AICommandCenterProps) {
           } else if (hasSpokenRef.current && !silenceTimeoutRef.current) {
             silenceTimeoutRef.current = setTimeout(() => {
               stopAndExecuteVoiceNote();
-            }, 2200);
+            }, 1200);
           }
 
           animFrameRef.current = requestAnimationFrame(measureVolume);
@@ -422,7 +420,7 @@ export function AICommandCenter({ onScheduleUpdated }: AICommandCenterProps) {
           }
           silenceTimeoutRef.current = setTimeout(() => {
             stopAndExecuteVoiceNote();
-          }, 2200);
+          }, 1200);
         };
 
         recognition.onerror = (event: any) => {
@@ -573,7 +571,7 @@ export function AICommandCenter({ onScheduleUpdated }: AICommandCenterProps) {
               {/* Recording controls */}
               <div className="flex items-center justify-between text-xs pt-1">
                 <span className="text-[11px] text-muted">
-                  Auto-executes 2s after you stop speaking
+                  Auto-executes ~1s after you stop speaking
                 </span>
                 <div className="flex items-center gap-2">
                   <button

@@ -66,12 +66,31 @@ export async function handleCommand(req: Request, res: Response, next: NextFunct
     const profile = await prisma.userProfile.findFirst({
       where: { userId },
     });
-    const fixedCommitments = await prisma.fixedCommitment.findMany({
+    let fixedCommitments = await prisma.fixedCommitment.findMany({
       where: {
         userId,
         OR: [{ dayOfWeek, isRecurring: true }, { specificDate: today }],
       },
     });
+
+    // Auto-seed college commitment for weekday if none exists for this user
+    if (fixedCommitments.length === 0 && dayOfWeek >= 1 && dayOfWeek <= 5) {
+      try {
+        const autoCollege = await prisma.fixedCommitment.create({
+          data: {
+            userId,
+            title: 'College Classes',
+            category: 'COLLEGE',
+            startTime: profile?.collegeStartTime || '09:00',
+            endTime: profile?.collegeEndTime || '15:00',
+            dayOfWeek,
+            isRecurring: true,
+            isDemo: false,
+          },
+        });
+        fixedCommitments = [autoCollege];
+      } catch {}
+    }
     const todayTasks = await prisma.task.findMany({
       where: { userId, scheduledDate: today },
     });
@@ -280,6 +299,10 @@ export async function handleCommand(req: Request, res: Response, next: NextFunct
         weeklyHolidays,
         weeklyCollegeTimings,
         activeOverride: overrideRecord,
+        collegeHours: {
+          start: profile?.collegeStartTime || '09:00',
+          end: profile?.collegeEndTime || '15:00',
+        },
         completedTasksToday: completedTasksToday.map((ct) => ({
           id: ct.id,
           title: ct.title,
@@ -395,6 +418,10 @@ export async function handleCommand(req: Request, res: Response, next: NextFunct
         dayOfWeek,
         weeklyHolidays,
         weeklyCollegeTimings,
+        collegeHours: {
+          start: profile?.collegeStartTime || '09:00',
+          end: profile?.collegeEndTime || '15:00',
+        },
         completedTasksToday: completedTasksToday.map((ct) => ({
           id: ct.id,
           title: ct.title,

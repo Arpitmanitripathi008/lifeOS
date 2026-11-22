@@ -140,6 +140,19 @@ export async function getDaySchedule(req: Request, res: Response, next: NextFunc
       commitments.push(c);
     }
 
+    // Auto-fallback for College Classes from profile if user has no DB row for college
+    const hasCollege = commitments.some((c) => c.category === 'COLLEGE');
+    if (!hasCollege && !isWeeklyHoliday && !isFullHoliday && dayOfWeek >= 1 && dayOfWeek <= 5) {
+      commitments.push({
+        id: 'default-college',
+        title: isHalfDay ? 'College Classes (Half Day)' : 'College Classes',
+        category: 'COLLEGE',
+        startTime: isHalfDay ? (activeOverride?.adjustedStartTime || '09:00') : (profile?.collegeStartTime || '09:00'),
+        endTime: isHalfDay ? (activeOverride?.adjustedEndTime || '12:00') : (profile?.collegeEndTime || '15:00'),
+        isRecurring: true,
+      });
+    }
+
     // 4. Fetch scheduled tasks for this date
     const tasks = await prisma.task.findMany({
       where: { userId, scheduledDate: dateStr },
@@ -495,6 +508,10 @@ export async function generateSchedule(req: Request, res: Response, next: NextFu
       dayOfWeek,
       weeklyHolidays,
       weeklyCollegeTimings,
+      collegeHours: {
+        start: profile?.collegeStartTime || '09:00',
+        end: profile?.collegeEndTime || '15:00',
+      },
       activeOverride: activeOverride
         ? {
             id: activeOverride.id,
