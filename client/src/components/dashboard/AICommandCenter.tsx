@@ -203,9 +203,11 @@ export function AICommandCenter({ onScheduleUpdated }: AICommandCenterProps) {
       console.error('Microphone access failed:', err);
       setIsRecording(false);
       if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-        setSpeechError('Microphone permission was denied. Please allow microphone access in your browser settings (URL address bar).');
+        setSpeechError(
+          'Microphone permission blocked. Please check your browser site permissions AND ensure Windows Settings → Privacy & security → Microphone ("Let desktop apps access your microphone") is turned ON.'
+        );
       } else if (err.name === 'NotFoundError') {
-        setSpeechError('No microphone was found on this device.');
+        setSpeechError('No microphone hardware detected. Please check your Windows Sound settings.');
       } else {
         setSpeechError(err.message || 'Could not access microphone.');
       }
@@ -246,7 +248,31 @@ export function AICommandCenter({ onScheduleUpdated }: AICommandCenterProps) {
           console.info('Speech recognition network error, trying audio fallback...');
           startMediaRecorder();
         } else if (event.error === 'audio-capture') {
-          setSpeechError('No microphone found. Please connect an audio input device.');
+          if (navigator.mediaDevices?.enumerateDevices) {
+            navigator.mediaDevices
+              .enumerateDevices()
+              .then((devices) => {
+                const hasAudio = devices.some((d) => d.kind === 'audioinput');
+                if (hasAudio) {
+                  setSpeechError(
+                    'Microphone detected, but Windows is blocking your browser. Open Windows Settings → Privacy & security → Microphone → turn ON "Let desktop apps access your microphone".'
+                  );
+                } else {
+                  setSpeechError(
+                    'No microphone input detected. Please verify your microphone is plugged in and enabled in Windows Sound Settings.'
+                  );
+                }
+              })
+              .catch(() => {
+                setSpeechError(
+                  'Cannot capture microphone audio. In Windows, check Settings → Privacy & security → Microphone → turn ON "Let desktop apps access your microphone".'
+                );
+              });
+          } else {
+            setSpeechError(
+              'Cannot capture microphone audio. In Windows, check Settings → Privacy & security → Microphone → turn ON "Let desktop apps access your microphone".'
+            );
+          }
         } else {
           setSpeechError(`Voice input error: ${event.error}`);
         }
