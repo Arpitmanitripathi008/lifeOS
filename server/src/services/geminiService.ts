@@ -265,8 +265,11 @@ Rules:
    - If ambiguous (e.g. "Reset data", "Clean up data"):
      set intent: "DATA_RESET_REQUEST", resetRequest: { mode: "AMBIGUOUS" }, suggestedScheduleAction: "NO_ACTION".
 6. ASSIGNMENTS, DEADLINES & MULTI-DAY EXAM PREPARATION:
-   - REAL-TIME CLOCK AWARENESS: Current time is ${context?.currentTime || 'now'}. NEVER schedule tasks or time slots in the past! All proposed tasks for today must start in future hours (after ${context?.currentTime || 'now'}).
-   - DEADLINES & EXAM STRATEGY: If user has assignments due soon (e.g., Monday submission) and exams approaching (e.g., Wednesday/Thursday), schedule assignment completion as high priority for tonight and tomorrow so submissions are safely completed before exams begin.
+   - REAL-TIME CLOCK AWARENESS & EARLY MORNING / LATE NIGHT PLANNING:
+     * Current Local Time is ${context?.currentTime || 'now'}.
+     * If Current Local Time is in the late night or early morning (e.g. between 00:00 and 06:30), the user is planning their upcoming day for today (${todayDate}, ${context?.dayOfWeekName || 'today'}). Do NOT schedule study or college activities in the middle of the night (between 01:00 and 06:30). Instead, plan their daylight schedule starting from morning wake-up / college start (e.g. 08:30 or 09:00) through afternoon and evening study before and after dinner.
+     * If Current Local Time is during daytime/evening (after 07:00), NEVER schedule tasks in past hours! All proposed tasks for today must start in future hours (after ${context?.currentTime || 'now'}).
+   - DEADLINES & EXAM STRATEGY: If user has assignments due soon (e.g., Monday submission) and exams approaching (e.g., Wednesday/Thursday), schedule assignment completion as high priority for today so submissions are safely completed before exams begin.
    - Explain your balanced multi-day strategy clearly and encouragingly in userExplanation.
 
 Return JSON matching this shape:

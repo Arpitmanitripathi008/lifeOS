@@ -1,4 +1,7 @@
 // LifeOS API Client
+import { getLocalDateString, getLocalTimeString, getClientTimezone } from '../utils/date';
+
+export { getLocalDateString, getLocalTimeString, getClientTimezone };
 
 const API_BASE = (import.meta.env.VITE_API_URL ? (import.meta.env.VITE_API_URL as string).replace(/\/$/, '') : '') + '/api';
 
@@ -18,9 +21,17 @@ async function fetchJSON<T>(url: string, options?: RequestInit): Promise<T> {
   const token = getAuthToken();
   const authHeaders: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
 
+  const clientHeaders: Record<string, string> = {
+    'x-client-date': getLocalDateString(),
+    'x-client-time': getLocalTimeString(),
+    'x-client-timezone': getClientTimezone(),
+    'x-timezone-offset': String(new Date().getTimezoneOffset()),
+  };
+
   const res = await fetch(`${API_BASE}${url}`, {
     headers: {
       'Content-Type': 'application/json',
+      ...clientHeaders,
       ...authHeaders,
       ...options?.headers,
     },
@@ -231,9 +242,9 @@ export const api = {
 
   // 9. Day Schedule & Adaptive Scheduling Engine
   getDaySchedule: (date?: string) =>
-    fetchJSON<any>(`/schedule/day${date ? `?date=${date}` : ''}`),
+    fetchJSON<any>(`/schedule/day?date=${date || getLocalDateString()}`),
   getWeekSchedule: (startDate?: string) =>
-    fetchJSON<any>(`/schedule/week${startDate ? `?startDate=${startDate}` : ''}`),
+    fetchJSON<any>(`/schedule/week?startDate=${startDate || getLocalDateString()}`),
   generateSchedule: (data: {
     date?: string;
     wakeUpTime?: string;
@@ -284,7 +295,7 @@ export const api = {
       message: string;
       latencyMs?: number;
     }>('/ai/status'),
-  sendAICommand: (prompt: string) =>
+  sendAICommand: (prompt: string, context?: { clientDate?: string; clientTime?: string; timezone?: string }) =>
     fetchJSON<{
       success: boolean;
       intent: string;
@@ -294,7 +305,12 @@ export const api = {
       tasksCount: number;
     }>('/ai/command', {
       method: 'POST',
-      body: JSON.stringify({ prompt }),
+      body: JSON.stringify({
+        prompt,
+        clientDate: context?.clientDate || getLocalDateString(),
+        clientTime: context?.clientTime || getLocalTimeString(),
+        timezone: context?.timezone || getClientTimezone(),
+      }),
     }),
   breakdownGoalAI: (data: { goalName: string; category?: string; targetWeeks?: number }) =>
     fetchJSON<any>('/ai/breakdown-goal', {

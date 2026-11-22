@@ -26,7 +26,7 @@ import {
   HelpCircle,
   ClipboardList,
 } from 'lucide-react';
-import { api } from '../services/api';
+import { api, getLocalDateString } from '../services/api';
 
 type AcademicTab = 'subjects' | 'exams' | 'assignments' | 'intelligence';
 
@@ -198,7 +198,7 @@ export function Academics() {
 
   const handleScheduleAssignmentToPlanner = async (asgn: any) => {
     try {
-      const today = new Date().toISOString().split('T')[0];
+      const today = getLocalDateString();
       await api.createTask({
         title: `Complete ${asgn.subject?.name ? asgn.subject.name + ' ' : ''}Assignment: ${asgn.title}`,
         category: 'DEADLINE',

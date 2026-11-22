@@ -1,10 +1,11 @@
 import type { Request, Response, NextFunction } from 'express';
 import { prisma } from '../db/client.js';
+import { getClientDateInfo } from '../utils/dateUtils.js';
 
 export async function getInsightsSummary(req: Request, res: Response, next: NextFunction) {
   try {
     const userId = req.user!.id;
-    const todayStr = new Date().toISOString().split('T')[0];
+    const { today: todayStr } = getClientDateInfo(req);
 
     // 1. Academic Metrics (Subject & Topic Progress) strictly for this user
     const subjects = await prisma.subject.findMany({

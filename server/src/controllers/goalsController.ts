@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from 'express';
 import { prisma } from '../db/client.js';
+import { getClientDateInfo } from '../utils/dateUtils.js';
 import { z } from 'zod';
 
 export const createGoalSchema = z.object({
@@ -104,10 +105,11 @@ export async function logGoalSession(req: Request, res: Response, next: NextFunc
     }
 
     const { scheduledDate, durationMins, isCompleted } = req.body;
+    const { today } = getClientDateInfo(req);
     const session = await prisma.goalSession.create({
       data: {
         personalGoalId: id,
-        scheduledDate: scheduledDate || new Date().toISOString().split('T')[0],
+        scheduledDate: scheduledDate || today,
         durationMins: durationMins || 45,
         isCompleted: isCompleted !== undefined ? isCompleted : true,
         completedAt: isCompleted ? new Date() : null,

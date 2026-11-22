@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import { prisma } from '../db/client.js';
 import { AdaptiveScheduler, timeToMinutes, minutesToTime, type SchedulingContext } from '../scheduling/adaptiveScheduler.js';
+import { getClientDateInfo } from '../utils/dateUtils.js';
 import { z } from 'zod';
 
 export const generateScheduleSchema = z.object({
@@ -45,8 +46,8 @@ export const scheduleOverrideSchema = z.object({
 export async function getDaySchedule(req: Request, res: Response, next: NextFunction) {
   try {
     const userId = req.user!.id;
-    const { date = new Date().toISOString().split('T')[0] } = req.query;
-    const dateStr = date as string;
+    const { today } = getClientDateInfo(req);
+    const dateStr = (req.query.date as string) || today;
 
     const dayOfWeek = new Date(`${dateStr}T00:00:00`).getDay();
 
@@ -362,7 +363,7 @@ export async function getWeekSchedule(req: Request, res: Response, next: NextFun
 export async function generateSchedule(req: Request, res: Response, next: NextFunction) {
   try {
     const userId = req.user!.id;
-    const todayStr = new Date().toISOString().split('T')[0];
+    const { today: todayStr, currentTime } = getClientDateInfo(req);
     const {
       date = todayStr,
       wakeUpTime: userWakeUp,
@@ -569,9 +570,9 @@ export async function generateSchedule(req: Request, res: Response, next: NextFu
 export async function modifySchedule(req: Request, res: Response, next: NextFunction) {
   try {
     const userId = req.user!.id;
-    const todayStr = new Date().toISOString().split('T')[0];
+    const { today, currentTime } = getClientDateInfo(req);
     const {
-      date = todayStr,
+      date = today,
       unavailableStart,
       unavailableEnd,
       reason = 'Unavailable time window',
@@ -714,7 +715,8 @@ export async function declareOverride(req: Request, res: Response, next: NextFun
 export async function undoOverride(req: Request, res: Response, next: NextFunction) {
   try {
     const userId = req.user!.id;
-    const { date = new Date().toISOString().split('T')[0] } = req.body;
+    const { today } = getClientDateInfo(req);
+    const { date = today } = req.body;
 
     const existing = await prisma.scheduleOverride.findFirst({
       where: { userId, date },

@@ -11,7 +11,7 @@ import {
   CheckCircle2,
   X,
 } from 'lucide-react';
-import { api } from '../services/api';
+import { api, getLocalDateString } from '../services/api';
 
 export function Insights() {
   const [data, setData] = useState<any>(null);
@@ -19,7 +19,7 @@ export function Insights() {
   const [showLogSleepModal, setShowLogSleepModal] = useState(false);
 
   // Voluntary Sleep Form state
-  const [sleepDate, setSleepDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [sleepDate, setSleepDate] = useState(() => getLocalDateString());
   const [bedTime, setBedTime] = useState('23:30');
   const [wakeTime, setWakeTime] = useState('07:30');
   const [sleepNotes, setSleepNotes] = useState('');

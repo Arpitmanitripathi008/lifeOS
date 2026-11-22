@@ -3,7 +3,7 @@ import { Card } from '../ui/Card';
 import { Calendar, Plus, CheckCircle2, Circle, Clock, Sparkles, RotateCcw, Trash2, Pencil } from 'lucide-react';
 import { EmptyState } from '../ui/EmptyState';
 import { Button } from '../ui/Button';
-import { api } from '../../services/api';
+import { api, getLocalDateString } from '../../services/api';
 
 export function TodayTimeline() {
   const [schedule, setSchedule] = useState<any>(null);
@@ -18,7 +18,7 @@ export function TodayTimeline() {
   const [newDuration, setNewDuration] = useState(45);
   const [newStartTime, setNewStartTime] = useState('');
   const [newSubjectId, setNewSubjectId] = useState('');
-  const [newScheduledDate, setNewScheduledDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [newScheduledDate, setNewScheduledDate] = useState(() => getLocalDateString());
   const [newDeadline, setNewDeadline] = useState('');
   const [subjects, setSubjects] = useState<any[]>([]);
 
@@ -52,7 +52,7 @@ export function TodayTimeline() {
     setNewPriority(task.priority || 'MEDIUM');
     setNewDuration(task.estimatedDuration || 45);
     setNewStartTime(task.startTime || task.scheduledStartTime || '');
-    setNewScheduledDate(task.scheduledDate || schedule?.date || new Date().toISOString().split('T')[0]);
+    setNewScheduledDate(task.scheduledDate || schedule?.date || getLocalDateString());
     setNewDeadline(task.deadline || '');
     setNewSubjectId(task.subjectId || '');
     setShowAddModal(true);
@@ -74,7 +74,7 @@ export function TodayTimeline() {
     e.preventDefault();
     if (!newTitle.trim()) return;
 
-    const today = new Date().toISOString().split('T')[0];
+    const today = getLocalDateString();
     const payload = {
       title: newTitle,
       category: newCategory,

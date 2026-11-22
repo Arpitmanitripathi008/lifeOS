@@ -24,6 +24,7 @@ export interface ScheduledActivity {
 
 export interface SchedulingContext {
   date: string;               // "YYYY-MM-DD"
+  todayDate?: string;         // "YYYY-MM-DD" (client-aware local date)
   currentTime?: string;       // "HH:mm" (e.g. "16:20")
   wakeUpTime: string;         // "HH:mm"
   bedTimeApprox?: string | null;
@@ -142,15 +143,21 @@ export class AdaptiveScheduler {
     const dayName = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][dayOfWeek];
 
     // Real-time awareness: if scheduling for today, never place tasks in the past!
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = context.todayDate || context.date;
     const isToday = context.date === todayStr;
     let effectiveStartCursor = wakeMinutes;
 
     if (isToday && context.currentTime) {
       const currentMins = timeToMinutes(context.currentTime);
-      // Round up to next 15-minute slot with a buffer
-      const futureEarliest = Math.ceil((currentMins + 5) / 15) * 15;
-      effectiveStartCursor = Math.max(wakeMinutes, futureEarliest);
+      // If current time is late night / early morning before wake-up (e.g. 1:00 AM before 07:30 AM wake-up),
+      // the user is planning the upcoming day: start at the student's normal wake-up time!
+      if (currentMins < wakeMinutes) {
+        effectiveStartCursor = wakeMinutes;
+      } else {
+        // Round up to next 15-minute slot with a buffer
+        const futureEarliest = Math.ceil((currentMins + 5) / 15) * 15;
+        effectiveStartCursor = Math.max(wakeMinutes, futureEarliest);
+      }
     }
 
     // Weekly holiday check (default Sunday [0])
@@ -473,7 +480,7 @@ export class AdaptiveScheduler {
     }
 
     // Rule: Protect Personal Growth Rotation
-    const goalsWithDeficit = context.personalGoals
+    const goalsWithDeficit = (context.personalGoals || [])
       .map((g) => ({
         ...g,
         deficit: g.prefSessionsPerWeek - g.completedThisWeek,

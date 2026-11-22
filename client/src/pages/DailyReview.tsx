@@ -14,7 +14,7 @@ import {
   X,
   ShieldCheck,
 } from 'lucide-react';
-import { api } from '../services/api';
+import { api, getLocalDateString } from '../services/api';
 
 export function DailyReview() {
   const [tasks, setTasks] = useState<any[]>([]);
@@ -38,7 +38,7 @@ export function DailyReview() {
   const [carryForwardProposal, setCarryForwardProposal] = useState<any>(null);
   const [isApprovingProposal, setIsApprovingProposal] = useState(false);
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = getLocalDateString();
 
   const loadReviewData = async () => {
     setLoading(true);

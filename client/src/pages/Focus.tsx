@@ -9,7 +9,7 @@ import {
   RotateCcw,
   CheckCircle2,
 } from 'lucide-react';
-import { api } from '../services/api';
+import { api, getLocalDateString } from '../services/api';
 
 type SessionType = 'FOCUS' | 'SHORT_BREAK' | 'LONG_BREAK';
 
@@ -33,7 +33,7 @@ export function Focus() {
   };
 
   const loadData = async () => {
-    const today = new Date().toISOString().split('T')[0];
+    const today = getLocalDateString();
     try {
       const [sessionsData, tasksData] = await Promise.all([
         api.getFocusSessions(today),

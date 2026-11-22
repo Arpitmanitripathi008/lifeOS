@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from 'express';
 import { prisma } from '../db/client.js';
+import { getClientDateInfo } from '../utils/dateUtils.js';
 import { z } from 'zod';
 
 export const createProposalSchema = z.object({
@@ -56,7 +57,8 @@ export async function acceptProposal(req: Request, res: Response, next: NextFunc
     }
 
     const parsed = JSON.parse(proposal.proposalData);
-    const targetDate = proposal.targetDate || new Date().toISOString().split('T')[0];
+    const { today } = getClientDateInfo(req);
+    const targetDate = proposal.targetDate || today;
 
     // 0. Handle Data Reset Proposal
     if (proposal.proposalType === 'DATA_RESET') {

@@ -20,13 +20,13 @@ import {
   Trash2,
   Pencil,
 } from 'lucide-react';
-import { api } from '../services/api';
+import { api, getLocalDateString } from '../services/api';
 
 type ViewMode = 'day' | 'week' | 'timeline';
 
 export function Planner() {
   const [view, setView] = useState<ViewMode>('day');
-  const [currentDate, setCurrentDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [currentDate, setCurrentDate] = useState(() => getLocalDateString());
   const [dayData, setDayData] = useState<any>(null);
   const [weekData, setWeekData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -485,7 +485,7 @@ export function Planner() {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => setCurrentDate(new Date().toISOString().split('T')[0])}
+            onClick={() => setCurrentDate(getLocalDateString())}
           >
             Today
           </Button>
@@ -727,7 +727,7 @@ export function Planner() {
 
           <div className="grid grid-cols-1 md:grid-cols-7 gap-2">
             {(weekData?.days || []).map((day: any) => {
-              const isToday = day.date === new Date().toISOString().split('T')[0];
+              const isToday = day.date === getLocalDateString();
               const isSelected = day.date === currentDate;
 
               return (

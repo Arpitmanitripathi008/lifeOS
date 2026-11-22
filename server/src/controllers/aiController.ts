@@ -1,11 +1,15 @@
 import type { Request, Response, NextFunction } from 'express';
 import { GeminiService } from '../services/geminiService.js';
 import { prisma } from '../db/client.js';
+import { getClientDateInfo } from '../utils/dateUtils.js';
 import { z } from 'zod';
 import dotenv from 'dotenv';
 
 export const commandRequestSchema = z.object({
   prompt: z.string().min(1, 'Prompt is required'),
+  clientDate: z.string().optional(),
+  clientTime: z.string().optional(),
+  timezone: z.string().optional(),
 });
 
 export const transcribeAudioSchema = z.object({
@@ -56,12 +60,7 @@ export async function handleCommand(req: Request, res: Response, next: NextFunct
   try {
     const userId = req.user!.id;
     const { prompt } = req.body;
-    const today = new Date().toISOString().split('T')[0];
-    const dayOfWeek = new Date().getDay();
-    const tomorrowObj = new Date();
-    tomorrowObj.setDate(tomorrowObj.getDate() + 1);
-    const tomorrowStr = tomorrowObj.toISOString().split('T')[0];
-    const dayOfWeekName = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][dayOfWeek];
+    const { today, currentTime, dayOfWeek, dayOfWeekName, tomorrowStr } = getClientDateInfo(req);
 
     // 1. Fetch current database context strictly for this authenticated user
     const profile = await prisma.userProfile.findFirst({
@@ -107,8 +106,6 @@ export async function handleCommand(req: Request, res: Response, next: NextFunct
         weeklyCollegeTimings = JSON.parse(profile.weeklyCollegeTimings);
       } catch {}
     }
-
-    const currentTime = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
 
     // 2. Call Gemini Service with user's private context
     const aiResult = await GeminiService.processCommand(prompt, {
@@ -276,6 +273,7 @@ export async function handleCommand(req: Request, res: Response, next: NextFunct
 
       const schedulingResult = AdaptiveScheduler.scheduleDay({
         date: targetDate,
+        todayDate: today,
         currentTime,
         wakeUpTime: '07:30',
         dayOfWeek: targetDayOfWeek,
@@ -391,6 +389,7 @@ export async function handleCommand(req: Request, res: Response, next: NextFunct
 
       const schedulingResult = AdaptiveScheduler.scheduleDay({
         date: today,
+        todayDate: today,
         currentTime,
         wakeUpTime,
         dayOfWeek,
@@ -467,7 +466,8 @@ export async function handleBreakdownGoal(req: Request, res: Response, next: Nex
 export async function handleCarryForward(req: Request, res: Response, next: NextFunction) {
   try {
     const userId = req.user!.id;
-    const { date = new Date().toISOString().split('T')[0] } = req.body;
+    const { today, tomorrowStr } = getClientDateInfo(req);
+    const date = req.body?.date || today;
 
     const incomplete = await prisma.task.findMany({
       where: {
@@ -485,9 +485,6 @@ export async function handleCarryForward(req: Request, res: Response, next: Next
       });
     }
 
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const tomorrowStr = tomorrow.toISOString().split('T')[0];
     const tomorrowTasks = await prisma.task.findMany({
       where: { userId, scheduledDate: tomorrowStr },
     });
