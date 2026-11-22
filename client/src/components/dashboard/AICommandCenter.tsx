@@ -30,6 +30,8 @@ export function AICommandCenter({ onScheduleUpdated }: AICommandCenterProps) {
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribingAudio, setIsTranscribingAudio] = useState(false);
   const [speechError, setSpeechError] = useState<string | null>(null);
+  const [audioVolume, setAudioVolume] = useState(0);
+  const [liveTranscript, setLiveTranscript] = useState('');
 
   const isWebSpeechSupported =
     typeof window !== 'undefined' && ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window);
@@ -51,11 +53,17 @@ export function AICommandCenter({ onScheduleUpdated }: AICommandCenterProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const baseTextRef = useRef('');
   const recognitionRef = useRef<any>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const mediaStreamRef = useRef<MediaStream | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const animFrameRef = useRef<number | null>(null);
+  const silenceTimeoutRef = useRef<any>(null);
+  const maxTimeoutRef = useRef<any>(null);
+  const hasSpokenRef = useRef(false);
+  const currentTranscriptRef = useRef('');
+  const isExecutingVoiceRef = useRef(false);
 
   useEffect(() => {
     api.getAIStatus()
@@ -63,11 +71,11 @@ export function AICommandCenter({ onScheduleUpdated }: AICommandCenterProps) {
       .catch(() => {});
   }, []);
 
-  const handleSubmit = useCallback(async () => {
-    if (!input.trim() && attachedFiles.length === 0) return;
+  const handleSubmit = useCallback(async (textToSubmit?: string) => {
+    const userText = (textToSubmit !== undefined ? textToSubmit : input).trim();
+    if (!userText && attachedFiles.length === 0) return;
     if (isThinking) return;
 
-    const userText = input.trim();
     setIsThinking(true);
     setAiResponse(null);
     setActionMessage(null);
@@ -130,16 +138,246 @@ export function AICommandCenter({ onScheduleUpdated }: AICommandCenterProps) {
     }
   };
 
-  const startMediaRecorder = useCallback(async () => {
+  const cancelRecording = useCallback(() => {
+    isExecutingVoiceRef.current = false;
+    if (silenceTimeoutRef.current) {
+      clearTimeout(silenceTimeoutRef.current);
+      silenceTimeoutRef.current = null;
+    }
+    if (maxTimeoutRef.current) {
+      clearTimeout(maxTimeoutRef.current);
+      maxTimeoutRef.current = null;
+    }
+    if (animFrameRef.current) {
+      cancelAnimationFrame(animFrameRef.current);
+      animFrameRef.current = null;
+    }
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch {}
+      recognitionRef.current = null;
+    }
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      try {
+        mediaRecorderRef.current.stop();
+      } catch {}
+    }
+    if (mediaStreamRef.current) {
+      try {
+        mediaStreamRef.current.getTracks().forEach((t) => t.stop());
+      } catch {}
+      mediaStreamRef.current = null;
+    }
+    if (audioContextRef.current) {
+      try {
+        audioContextRef.current.close();
+      } catch {}
+      audioContextRef.current = null;
+    }
+    audioChunksRef.current = [];
+    currentTranscriptRef.current = '';
+    setLiveTranscript('');
+    setAudioVolume(0);
+    setIsRecording(false);
+    setIsTranscribingAudio(false);
+    setSpeechError(null);
+  }, []);
+
+  const stopAndExecuteVoiceNote = useCallback(async () => {
+    if (isExecutingVoiceRef.current) return;
+    isExecutingVoiceRef.current = true;
+
+    if (silenceTimeoutRef.current) {
+      clearTimeout(silenceTimeoutRef.current);
+      silenceTimeoutRef.current = null;
+    }
+    if (maxTimeoutRef.current) {
+      clearTimeout(maxTimeoutRef.current);
+      maxTimeoutRef.current = null;
+    }
+    if (animFrameRef.current) {
+      cancelAnimationFrame(animFrameRef.current);
+      animFrameRef.current = null;
+    }
+    setAudioVolume(0);
+
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch {}
+      recognitionRef.current = null;
+    }
+
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      try {
+        mediaRecorderRef.current.stop();
+      } catch {}
+    }
+
+    if (mediaStreamRef.current) {
+      try {
+        mediaStreamRef.current.getTracks().forEach((t) => t.stop());
+      } catch {}
+      mediaStreamRef.current = null;
+    }
+
+    if (audioContextRef.current) {
+      try {
+        audioContextRef.current.close();
+      } catch {}
+      audioContextRef.current = null;
+    }
+
+    setIsRecording(false);
+
+    // 1. If Web Speech API has captured transcript, execute immediately!
+    const textFromSpeech = currentTranscriptRef.current.trim();
+    if (textFromSpeech.length > 0) {
+      setLiveTranscript(textFromSpeech);
+      setInput(textFromSpeech);
+      isExecutingVoiceRef.current = false;
+      await handleSubmit(textFromSpeech);
+      return;
+    }
+
+    // 2. Otherwise transcribe recorded audio chunks using Gemini AI
+    setIsTranscribingAudio(true);
+    setSpeechError(null);
+
+    await new Promise((r) => setTimeout(r, 350));
+
+    const chunks = audioChunksRef.current;
+    if (chunks.length === 0) {
+      setIsTranscribingAudio(false);
+      isExecutingVoiceRef.current = false;
+      setSpeechError('No speech was captured. Please speak closer to your microphone.');
+      return;
+    }
+
+    const mimeType = mediaRecorderRef.current?.mimeType || 'audio/webm';
+    const blob = new Blob(chunks, { type: mimeType });
+
+    if (blob.size < 200) {
+      setIsTranscribingAudio(false);
+      isExecutingVoiceRef.current = false;
+      setSpeechError('Recording was too short or empty. Please speak your instructions.');
+      return;
+    }
+
     try {
-      if (!navigator.mediaDevices?.getUserMedia) {
-        setSpeechError('Microphone audio recording is not supported in this browser.');
-        return;
-      }
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        try {
+          const base64Data = (reader.result as string).split(',')[1];
+          if (!base64Data) {
+            setIsTranscribingAudio(false);
+            isExecutingVoiceRef.current = false;
+            return;
+          }
 
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          const res = await api.transcribeAudio({
+            audioBase64: base64Data,
+            mimeType,
+          });
+
+          const transcript = res.transcript?.trim() || '';
+          if (transcript.length > 0) {
+            setLiveTranscript(transcript);
+            setInput(transcript);
+            setIsTranscribingAudio(false);
+            isExecutingVoiceRef.current = false;
+            await handleSubmit(transcript);
+          } else {
+            setIsTranscribingAudio(false);
+            isExecutingVoiceRef.current = false;
+            setSpeechError('No speech could be recognized. Please try speaking again.');
+          }
+        } catch (transcribeErr: any) {
+          setIsTranscribingAudio(false);
+          isExecutingVoiceRef.current = false;
+          setSpeechError(transcribeErr.message || 'Error processing audio with Gemini AI.');
+        }
+      };
+      reader.readAsDataURL(blob);
+    } catch (err: any) {
+      setIsTranscribingAudio(false);
+      isExecutingVoiceRef.current = false;
+      setSpeechError(err.message || 'Failed to read voice note recording.');
+    }
+  }, [handleSubmit]);
+
+  const startVoiceNote = useCallback(async () => {
+    cancelRecording();
+    isExecutingVoiceRef.current = false;
+    hasSpokenRef.current = false;
+    currentTranscriptRef.current = '';
+    audioChunksRef.current = [];
+    setLiveTranscript('');
+    setSpeechError(null);
+
+    let stream: MediaStream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       mediaStreamRef.current = stream;
+    } catch (err: any) {
+      console.error('Microphone access failed:', err);
+      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+        setSpeechError(
+          'Microphone permission blocked. Please ensure both your browser site permission AND Windows Settings → Privacy & security → Microphone ("Let desktop apps access your microphone") are turned ON.'
+        );
+      } else if (err.name === 'NotFoundError') {
+        setSpeechError('No microphone hardware detected. Please check your Windows Sound settings.');
+      } else {
+        setSpeechError(err.message || 'Could not access microphone.');
+      }
+      return;
+    }
 
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (AudioCtx) {
+        const audioCtx = new AudioCtx();
+        audioContextRef.current = audioCtx;
+        const source = audioCtx.createMediaStreamSource(stream);
+        const analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 256;
+        source.connect(analyser);
+
+        const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+        const measureVolume = () => {
+          if (!mediaStreamRef.current) return;
+          analyser.getByteFrequencyData(dataArray);
+          let sum = 0;
+          for (let i = 0; i < dataArray.length; i++) {
+            sum += dataArray[i];
+          }
+          const avg = sum / dataArray.length;
+          const vol = Math.min(100, Math.round(avg * 2.8));
+          setAudioVolume(vol);
+
+          if (vol > 12) {
+            hasSpokenRef.current = true;
+            if (silenceTimeoutRef.current) {
+              clearTimeout(silenceTimeoutRef.current);
+              silenceTimeoutRef.current = null;
+            }
+          } else if (hasSpokenRef.current && !silenceTimeoutRef.current) {
+            silenceTimeoutRef.current = setTimeout(() => {
+              stopAndExecuteVoiceNote();
+            }, 2200);
+          }
+
+          animFrameRef.current = requestAnimationFrame(measureVolume);
+        };
+        measureVolume();
+      }
+    } catch (audioErr) {
+      console.warn('AudioContext volume metering error:', audioErr);
+    }
+
+    try {
       const mimeType =
         typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported('audio/webm')
           ? 'audio/webm'
@@ -156,169 +394,68 @@ export function AICommandCenter({ onScheduleUpdated }: AICommandCenterProps) {
         }
       };
 
-      mediaRecorder.onstop = async () => {
-        if (mediaStreamRef.current) {
-          mediaStreamRef.current.getTracks().forEach((t) => t.stop());
-          mediaStreamRef.current = null;
-        }
-
-        const effectiveMime = mimeType || 'audio/webm';
-        const blob = new Blob(audioChunksRef.current, { type: effectiveMime });
-        if (blob.size === 0) return;
-
-        setIsTranscribingAudio(true);
-        setSpeechError(null);
-
-        const reader = new FileReader();
-        reader.onloadend = async () => {
-          try {
-            const base64Data = (reader.result as string).split(',')[1];
-            if (!base64Data) {
-              setIsTranscribingAudio(false);
-              return;
-            }
-
-            const res = await api.transcribeAudio({
-              audioBase64: base64Data,
-              mimeType: effectiveMime,
-            });
-
-            if (res.transcript) {
-              setInput((prev) => (prev ? prev.trim() + ' ' : '') + res.transcript);
-            }
-          } catch (transcribeErr: any) {
-            setSpeechError(transcribeErr.message || 'Error transcribing speech with AI.');
-          } finally {
-            setIsTranscribingAudio(false);
-          }
-        };
-        reader.readAsDataURL(blob);
-      };
-
       mediaRecorderRef.current = mediaRecorder;
-      mediaRecorder.start(250);
-      setIsRecording(true);
-      setSpeechError(null);
-    } catch (err: any) {
-      console.error('Microphone access failed:', err);
-      setIsRecording(false);
-      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-        setSpeechError(
-          'Microphone permission blocked. Please check your browser site permissions AND ensure Windows Settings → Privacy & security → Microphone ("Let desktop apps access your microphone") is turned ON.'
-        );
-      } else if (err.name === 'NotFoundError') {
-        setSpeechError('No microphone hardware detected. Please check your Windows Sound settings.');
-      } else {
-        setSpeechError(err.message || 'Could not access microphone.');
-      }
+      mediaRecorder.start(200);
+    } catch (recErr) {
+      console.warn('MediaRecorder recording error:', recErr);
     }
-  }, []);
 
-  const startWebSpeech = useCallback(() => {
     try {
       const SpeechRecognitionClass = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
-      if (!SpeechRecognitionClass) {
-        startMediaRecorder();
-        return;
-      }
+      if (SpeechRecognitionClass) {
+        const recognition = new SpeechRecognitionClass();
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.lang = navigator.language || 'en-US';
 
-      const recognition = new SpeechRecognitionClass();
-      recognition.continuous = true;
-      recognition.interimResults = true;
-      recognition.lang = 'en-US';
-
-      baseTextRef.current = input ? input.trim() + ' ' : '';
-
-      recognition.onresult = (event: any) => {
-        let fullTranscript = '';
-        for (let i = 0; i < event.results.length; ++i) {
-          fullTranscript += event.results[i][0].transcript;
-        }
-        setInput(baseTextRef.current + fullTranscript);
-      };
-
-      recognition.onerror = (event: any) => {
-        console.warn('SpeechRecognition error:', event.error);
-        setIsRecording(false);
-        if (event.error === 'not-allowed') {
-          setSpeechError('Microphone permission was denied. Please allow microphone access in your browser settings.');
-        } else if (event.error === 'no-speech') {
-          setSpeechError('No speech detected. Please make sure your microphone is working and speak clearly.');
-        } else if (event.error === 'network') {
-          console.info('Speech recognition network error, trying audio fallback...');
-          startMediaRecorder();
-        } else if (event.error === 'audio-capture') {
-          if (navigator.mediaDevices?.enumerateDevices) {
-            navigator.mediaDevices
-              .enumerateDevices()
-              .then((devices) => {
-                const hasAudio = devices.some((d) => d.kind === 'audioinput');
-                if (hasAudio) {
-                  setSpeechError(
-                    'Microphone detected, but Windows is blocking your browser. Open Windows Settings → Privacy & security → Microphone → turn ON "Let desktop apps access your microphone".'
-                  );
-                } else {
-                  setSpeechError(
-                    'No microphone input detected. Please verify your microphone is plugged in and enabled in Windows Sound Settings.'
-                  );
-                }
-              })
-              .catch(() => {
-                setSpeechError(
-                  'Cannot capture microphone audio. In Windows, check Settings → Privacy & security → Microphone → turn ON "Let desktop apps access your microphone".'
-                );
-              });
-          } else {
-            setSpeechError(
-              'Cannot capture microphone audio. In Windows, check Settings → Privacy & security → Microphone → turn ON "Let desktop apps access your microphone".'
-            );
+        recognition.onresult = (event: any) => {
+          let fullTranscript = '';
+          for (let i = 0; i < event.results.length; ++i) {
+            fullTranscript += event.results[i][0].transcript;
           }
-        } else {
-          setSpeechError(`Voice input error: ${event.error}`);
-        }
-      };
+          currentTranscriptRef.current = fullTranscript;
+          setLiveTranscript(fullTranscript);
+          hasSpokenRef.current = true;
 
-      recognition.onend = () => {
-        setIsRecording(false);
-      };
+          if (silenceTimeoutRef.current) {
+            clearTimeout(silenceTimeoutRef.current);
+          }
+          silenceTimeoutRef.current = setTimeout(() => {
+            stopAndExecuteVoiceNote();
+          }, 2200);
+        };
 
-      recognitionRef.current = recognition;
-      recognition.start();
-      setIsRecording(true);
-      setSpeechError(null);
-    } catch (err: any) {
-      console.warn('Web Speech start failed, falling back to MediaRecorder:', err);
-      startMediaRecorder();
+        recognition.onerror = (event: any) => {
+          console.warn('SpeechRecognition live event:', event.error);
+        };
+
+        recognition.onend = () => {
+          if (hasSpokenRef.current && !isExecutingVoiceRef.current) {
+            stopAndExecuteVoiceNote();
+          }
+        };
+
+        recognitionRef.current = recognition;
+        recognition.start();
+      }
+    } catch (speechErr) {
+      console.warn('SpeechRecognition live setup error:', speechErr);
     }
-  }, [input, startMediaRecorder]);
+
+    maxTimeoutRef.current = setTimeout(() => {
+      stopAndExecuteVoiceNote();
+    }, 35000);
+
+    setIsRecording(true);
+  }, [cancelRecording, stopAndExecuteVoiceNote]);
 
   const toggleRecording = useCallback(() => {
     if (isRecording) {
-      if (recognitionRef.current) {
-        try {
-          recognitionRef.current.stop();
-        } catch {}
-        recognitionRef.current = null;
-      }
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-        try {
-          mediaRecorderRef.current.stop();
-        } catch {}
-        mediaRecorderRef.current = null;
-      }
-      setIsRecording(false);
-      return;
-    }
-
-    setSpeechError(null);
-    if (isWebSpeechSupported) {
-      startWebSpeech();
-    } else if (isMediaRecorderSupported) {
-      startMediaRecorder();
+      stopAndExecuteVoiceNote();
     } else {
-      setSpeechError('Voice recording is not supported in this browser environment.');
+      startVoiceNote();
     }
-  }, [isRecording, isWebSpeechSupported, isMediaRecorderSupported, startWebSpeech, startMediaRecorder]);
+  }, [isRecording, stopAndExecuteVoiceNote, startVoiceNote]);
 
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     setFileError('');
@@ -391,44 +528,98 @@ export function AICommandCenter({ onScheduleUpdated }: AICommandCenterProps) {
             className="w-full px-5 pt-4 pb-2 bg-transparent text-charcoal placeholder:text-muted-light/70 text-sm resize-none focus:outline-none disabled:opacity-50"
           />
 
-          {/* Recording indicator */}
+          {/* Active Voice Recording Overlay */}
           {isRecording && (
-            <div className="mx-5 mb-2 flex items-center justify-between px-3 py-1.5 bg-terracotta/10 border border-terracotta/30 rounded-lg">
-              <div className="flex items-center gap-2">
-                <div className="w-2.5 h-2.5 rounded-full bg-terracotta animate-ping" />
-                <span className="text-xs text-terracotta font-medium">Listening... Speak now</span>
+            <div className="mx-4 mb-3 p-3.5 bg-gradient-to-r from-terracotta/10 via-terracotta/5 to-transparent border border-terracotta/30 rounded-xl space-y-2.5 animate-fadeIn">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <span className="relative flex h-3 w-3">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-terracotta opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-terracotta"></span>
+                  </span>
+                  <span className="text-xs font-semibold text-terracotta tracking-wide uppercase">
+                    Listening to voice note...
+                  </span>
+                </div>
+
+                {/* Live sound wave bars visualizer */}
+                <div className="flex items-center gap-1 h-5 px-2.5 py-1 bg-terracotta/15 rounded-full" title={`Audio input level: ${audioVolume}%`}>
+                  {[0.5, 0.9, 1.3, 0.8, 0.6].map((multiplier, idx) => {
+                    const barHeight = Math.max(4, Math.min(18, Math.round((audioVolume * multiplier) / 3)));
+                    return (
+                      <span
+                        key={idx}
+                        className="w-1 bg-terracotta rounded-full transition-all duration-75"
+                        style={{ height: `${barHeight}px` }}
+                      />
+                    );
+                  })}
+                </div>
               </div>
-              <button
-                type="button"
-                onClick={toggleRecording}
-                className="text-[11px] font-semibold text-terracotta hover:underline ml-2"
-              >
-                Done Speaking
-              </button>
+
+              {/* Spoken preview or guidance */}
+              <div className="text-xs text-charcoal bg-paper/90 rounded-lg p-2.5 border border-border-light min-h-[38px] flex items-center">
+                {liveTranscript ? (
+                  <p className="italic text-charcoal font-medium">
+                    &ldquo;{liveTranscript}&rdquo;
+                  </p>
+                ) : (
+                  <p className="text-muted text-[11px]">
+                    Speak your day or schedule (e.g. <em>&ldquo;I have college from 9 to 2 PM, then want to study DSA for 2 hours&rdquo;</em>)...
+                  </p>
+                )}
+              </div>
+
+              {/* Recording controls */}
+              <div className="flex items-center justify-between text-xs pt-1">
+                <span className="text-[11px] text-muted">
+                  Auto-executes 2s after you stop speaking
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={cancelRecording}
+                    className="px-2.5 py-1 text-[11px] font-medium text-muted hover:text-charcoal hover:bg-beige-light rounded-md transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={stopAndExecuteVoiceNote}
+                    className="px-3 py-1 bg-terracotta text-white font-medium text-[11px] rounded-md shadow-sm hover:bg-terracotta/90 transition-all flex items-center gap-1.5"
+                  >
+                    <span>Done & Execute Now</span>
+                    <Send size={11} />
+                  </button>
+                </div>
+              </div>
             </div>
           )}
 
-          {/* Transcribing audio indicator */}
+          {/* Transcribing & AI Executing indicator */}
           {isTranscribingAudio && (
-            <div className="mx-5 mb-2 flex items-center gap-2 px-3 py-1.5 bg-olive/10 border border-olive/30 rounded-lg">
-              <Loader2 size={13} className="animate-spin text-olive shrink-0" />
-              <span className="text-xs text-olive font-medium">Transcribing speech with AI...</span>
+            <div className="mx-4 mb-3 p-3 bg-olive/10 border border-olive/30 rounded-xl flex items-center gap-3">
+              <Loader2 size={16} className="animate-spin text-olive shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-olive">Transcribing Voice Note with Gemini AI...</p>
+                <p className="text-[11px] text-charcoal/70 truncate">Transcribing your audio and immediately building your schedule proposals.</p>
+              </div>
             </div>
           )}
 
           {/* Speech error banner */}
           {speechError && (
-            <div className="mx-5 mb-2 flex items-center justify-between gap-2 px-3 py-1.5 bg-terracotta/10 border border-terracotta/30 rounded-lg text-xs text-terracotta">
-              <div className="flex items-center gap-1.5 min-w-0">
-                <AlertCircle size={14} className="shrink-0" />
-                <span className="truncate">{speechError}</span>
+            <div className="mx-4 mb-3 flex items-start justify-between gap-2.5 p-3 bg-terracotta/10 border border-terracotta/30 rounded-xl text-xs text-terracotta">
+              <div className="flex items-start gap-2 min-w-0">
+                <AlertCircle size={15} className="shrink-0 mt-0.5 text-terracotta" />
+                <span className="leading-snug">{speechError}</span>
               </div>
               <button
                 type="button"
                 onClick={() => setSpeechError(null)}
-                className="text-muted hover:text-charcoal p-0.5 shrink-0"
+                className="text-terracotta/70 hover:text-terracotta p-0.5 shrink-0"
               >
-                <X size={12} />
+                <X size={14} />
               </button>
             </div>
           )}
@@ -530,7 +721,7 @@ export function AICommandCenter({ onScheduleUpdated }: AICommandCenterProps) {
           </div>
 
           <button
-            onClick={handleSubmit}
+            onClick={() => handleSubmit()}
             disabled={(!input.trim() && attachedFiles.length === 0) || isThinking}
             className="p-2.5 rounded-lg bg-olive text-paper hover:bg-olive-dark transition-colors disabled:opacity-30 disabled:cursor-not-allowed shadow-sm flex items-center gap-1.5"
             title="Send to LifeOS AI"
